@@ -43,6 +43,7 @@ handle_call({kill},_,ready)->
 %from user
 handle_cast({new,Gender,{X,Y}},ready)->
 	%ets:insert(location),
+	io:format("new proc: ~p in {~p,~p}~n",[Gender,X,Y]),
 	{noreply,ready};
 
 

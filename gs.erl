@@ -2,8 +2,10 @@
 -behaviour(gen_server).
 -compile(export_all).
 -define(PCS,1).
+-define(N,20).
+-define(M,40).
 
-
+%-------------------------------------
 start_link()->
 	gen_server:start_link({local,gs},gs,[],[]).
 
@@ -11,12 +13,13 @@ init(_)->
 	ets:new(pc,[set,named_table]),
 	ets:new(param,[set,named_table]),
 	ets:insert(param,{connect_cnt,0}),
-	%spawn(fun()->wait(10000),gen_server:cast(gs,{timeout}) end). %set timer to 10 sec - if not all 4 pcs connect - shut down
+	spawn(fun()->wait(5000),gen_server:cast(gs,{timeout}) end), %set timer to 5 sec - if not all 4 pcs connect - shut down
 	{ok,set}.
+%------------------------------------
 
 %wait for all 4 pc to connect
-handle_call({ready,I},From,set)->
-	ets:insert(pc,{From,I}), %save connected pc to ets
+handle_call({ready,index,I},From,set)->
+	ets:insert(pc,{I,From}), %save connected pc to ets
 	
 	%increment counter
 	[{connect_cnt,Tmp}]=ets:lookup(param,connect_cnt),
@@ -37,12 +40,25 @@ handle_cast({timeout},State)->
 	{noreply,State};
 handle_cast({kill},_)->
 	{stop,normal,done};
-handle_cast({status,Grid},ready)->
+handle_cast({status,Index,Grid},ready)->
 	io:format("~p~n",[Grid]),
 	{noreply,ready}.
 
 terminate(normal,_)->
-	ok.	
+	io:format("server down~n").	
+
+%------------------------------------------------------
+%-------------------UI --------------------------------
+%------------------------------------------------------
+create(Gender,X,Y) when X<?M/2 , Y<?N/2->	[{pc1,From}]=ets:lookup(pc,pc1), gen_server:cast(From,{new,Gender,{X,Y}});	
+create(Gender,X,Y) when X>=?M/2 , Y<?N/2->	[{pc2,From}]=ets:lookup(pc,pc2), gen_server:cast(From,{new,Gender,{X,Y}});
+create(Gender,X,Y) when X<?M/2 , Y>=?N/2->	[{pc3,From}]=ets:lookup(pc,pc3), gen_server:cast(From,{new,Gender,{X,Y}});
+create(Gender,X,Y) when X>=?M/2 , Y>=?N/2->	[{pc4,From}]=ets:lookup(pc,pc4), gen_server:cast(From,{new,Gender,{X,Y}}).
+	
+
+%------------------------------------------------------
+%-------------GRAPHICS --------------------------------
+%------------------------------------------------------
 
 print_board(L=[H|_T])->
 	io:format("\e[H\e[J"),
@@ -67,8 +83,6 @@ init_board(N,0,Board,Line,Save)->
 	init_board(N-1,Save,Board++[Line],[],Save);
 init_board(N,M,Board,Line,Save)->
 	init_board(N,M-1,Board,Line++" ",Save).
-
-
 
 start_board(N,M)->
 	ets:new(db,[set,named_table]),
