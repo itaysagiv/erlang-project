@@ -3,7 +3,8 @@
 -compile(export_all).
 -define(MAIN,'main@itay-VirtualBox').
 
-%open gs
+%    starting the gen server and init it
+%---------------------------------------------------------
 start_link(Num)->
 	gen_server:start_link({local,Num},pc,[Num],[]).	%start gs
 
@@ -18,13 +19,16 @@ init([Num]) ->
 	{ok,ready}.				            %done
 
 
-status()->%function that send the main the status if the pc with the location of all the proesses in this pc
+%          --Status--
+%function that send the main the status if the pc with the location of all the proesses in this pc
+status()->
 	receive %wait
 	after 1000->ok
 	end, %end wait
 	Location=ets:tab2list(db_location),		       	%save all locations ets in list
 	gen_server:cast({gs,?MAIN},{status,Location}),  	%send the ets with locations to main
 	status(). 
+%---------------------------------------------------------
 
 %----kill-state----
 terminate(normal,kill)->ok.   						% terminate the pc
