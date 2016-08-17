@@ -14,7 +14,7 @@ init([Num]) ->
 	ets:new(db_location,[bag,named_table]),		    %for holding the process that will run in my corner
 	ets:new(param,[set,named_table]),		    %for paramters
 	ets:insert(param,{index,Num}),			    %add my number to ets, this number will say which corner in the map i manege
-	gen_server:call({gs,?MAIN},{ready,Num}),%send main im ready
+	gen_server:call({gs,?MAIN},{ready,read(param,index),Num}),%send main im ready
 	spawn(fun()->status() end),
 	{ok,ready}.				            %done
 
@@ -26,7 +26,7 @@ status()->
 	after 1000->ok
 	end, %end wait
 	Location=ets:tab2list(db_location),		       	%save all locations ets in list
-	gen_server:cast({gs,?MAIN},{status,Location}),  	%send the ets with locations to main
+	gen_server:cast({gs,?MAIN},{status,read(param,index),Location}),  	%send the ets with locations to main
 	status(). 
 %---------------------------------------------------------
 
@@ -34,7 +34,7 @@ status()->
 terminate(normal,kill)->ok.   						% terminate the pc
 handle_call({kill},_,ready)->
 	Location=ets:tab2list(db_location),		        	%save all locations ets in list
-	gen_server:cast({gs,?MAIN},{suicide,Location}),  	%send the ets with locations to main
+	gen_server:cast({gs,?MAIN},{suicide,read(param,index),Location}),  	%send the ets with locations to main
 	ets:delete(location),ets:delete(param),				%delete the ets
 	{stop,normal,suicide}.						%message reply
 						
@@ -66,7 +66,12 @@ proccess()->ok.
 
 lightON()->ok.
 
+read(Tab,Key)->
+	[{Key,Val}]=ets:lookup(Tab,Key),
+	Val.
 
+write(Tab,Key,Val)
+	ets:insert(Tab,{Key,Val}).
 
 
 
