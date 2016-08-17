@@ -1,3 +1,5 @@
+%hello
+
 -module(gs).
 -behaviour(gen_server).
 -compile(export_all).
