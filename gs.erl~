@@ -1,3 +1,5 @@
+%hello
+
 -module(gs).
 -behaviour(gen_server).
 -compile(export_all).
@@ -22,7 +24,7 @@ handle_call({ready,I},From,set)->
 	[{connect_cnt,Tmp}]=ets:lookup(param,connect_cnt),
 	ets:insert(param,{connect_cnt,Tmp+1}),
 
-	io:format("pc~p connected~n",[I]),
+	io:format("~p connected~n",[I]),
 	%if 4 pcs connected go to ready
 	case Tmp+1==?PCS of
 		false->	{reply,ack,set};
