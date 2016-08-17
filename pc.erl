@@ -14,7 +14,7 @@ init([Num]) ->
 	ets:new(db_location,[bag,named_table]),		    %for holding the process that will run in my corner
 	ets:new(param,[set,named_table]),		    %for paramters
 	ets:insert(param,{index,Num}),			    %add my number to ets, this number will say which corner in the map i manege
-	gen_server:call({gs,?MAIN},{ready,read(param,index),Num}),%send main im ready
+	gen_server:call({gs,?MAIN},{ready,Num}),%send main im ready
 	spawn(fun()->status() end),
 	{ok,ready}.				            %done
 
@@ -71,7 +71,7 @@ read(Tab,Key)->
 	[{Key,Val}]=ets:lookup(Tab,Key),
 	Val.
 
-write(Tab,Key,Val)
+write(Tab,Key,Val)->
 	ets:insert(Tab,{Key,Val}).
 
 

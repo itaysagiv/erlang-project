@@ -18,7 +18,7 @@ init(_)->
 %------------------------------------
 
 %wait for all 4 pc to connect
-handle_call({ready,index,I},From,set)->
+handle_call({ready,I},From,set)->
 	ets:insert(pc,{I,From}), %save connected pc to ets
 	
 	%increment counter
