@@ -1,7 +1,7 @@
 -module(pc).
 -behaviour(gen_server).
 -compile(export_all).
--define(MAIN,'main@itay-VirtualBox').
+-define(MAIN,'main@asaf-VirtualBox').
 
 %    starting the gen server and init it
 %---------------------------------------------------------
@@ -14,10 +14,13 @@ init([Num]) ->
 	ets:new(db_location,[bag,named_table]),		    %for holding the process that will run in my corner
 	ets:new(param,[set,named_table]),		    %for paramters
 	ets:insert(param,{index,Num}),			    %add my number to ets, this number will say which corner in the map i manege
-	gen_server:call({gs,?MAIN},{ready,Num}),%send main im ready
-	spawn(fun()->status() end),
-	{ok,ready}.				            %done
+	gen_server:call({gs,?MAIN},{ready,Num}),	    %send main im ready
+	
+	{ok,set}.				            %done
 
+handle_cast({ready},_,set)->io:format("connected to main"),
+	%spawn(fun()->status() end),
+	{noreply,set}.
 
 %          --Status--
 %function that send the main the status if the pc with the location of all the proesses in this pc

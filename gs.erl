@@ -1,9 +1,13 @@
 -module(gs).
 -behaviour(gen_server).
 -compile(export_all).
--define(PCS,1).
+-define(PCS,2).
 -define(N,20).
 -define(M,40).
+-define(PC1,'pc1@asaf-VirtualBox').
+-define(PC2,'pc2@asaf-VirtualBox').
+-define(PC3,'pc3@asaf-VirtualBox').
+-define(PC4,'pc4@asaf-VirtualBox').
 
 %-------------------------------------
 start_link()->
@@ -13,9 +17,19 @@ init(_)->
 	ets:new(pc,[set,named_table]),
 	ets:new(param,[set,named_table]),
 	ets:insert(param,{connect_cnt,0}),
-	spawn(fun()->wait(5000),gen_server:cast(gs,{timeout}) end), %set timer to 5 sec - if not all 4 pcs connect - shut down
+	spawn(fun()->wait(50000),gen_server:cast(gs,{timeout}) end), %set timer to 5 sec - if not all 4 pcs connect - shut down
 	{ok,set}.
 %------------------------------------
+
+sendReady(0)->io:format("all pcs connected and givig status");
+sendReady(N)when N==4->[{pc4,From}]=ets:lookup(pc,pc4), gen_server:cast(From,{ready}),
+	sendReady(N-1);
+sendReady(N)when N==3->[{pc3,From}]=ets:lookup(pc,pc3), gen_server:cast(From,{ready}),
+	sendReady(N-1);
+sendReady(N)when N==2->[{pc2,From}]=ets:lookup(pc,pc2), gen_server:cast(From,{ready}),
+	sendReady(N-1);
+sendReady(N)when N==1->[{pc1,From}]=ets:lookup(pc,pc1), gen_server:cast(From,{ready}),
+	sendReady(N-1).
 
 %wait for all 4 pc to connect
 handle_call({ready,I},From,set)->
@@ -26,11 +40,17 @@ handle_call({ready,I},From,set)->
 	ets:insert(param,{connect_cnt,Tmp+1}),
 
 	io:format("~p connected~n",[I]),
+	io:format("~p pcs are connected so far~n",[Tmp+1]),
+
 	%if 4 pcs connected go to ready
 	case Tmp+1==?PCS of
 		false->	{reply,ack,set};
-		true->	{reply,ack,ready}
+		true->	gen_server:cast(gs,{go,Tmp+1}),{reply,ack,confirm}
 	end.
+
+handle_cast({go,N},confirm)->
+	sendReady(N),
+	{noreply,ready};
 
 %handles the time out in the setting
 handle_cast({timeout},set)->
