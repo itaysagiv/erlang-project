@@ -10,9 +10,11 @@ start_link()->
 	gen_server:start_link({local,gs},gs,[],[]).
 
 init(_)->
-	%start_board(N,M),
+	start_board(?N,?M),
 	ets:new(pc,[set,named_table]),
 	ets:new(param,[set,named_table]),
+	ets:new(location,[set,named_table]),
+	ets:insert(location,[{pc1,[]},{pc2,[]},{pc3,[]},{pc4,[]}]),
 	ets:insert(param,{connect_cnt,0}),
 	spawn_link(fun()->wait(50000),gen_server:cast(gs,{timeout}) end), %set timer to 5 sec - if not all 4 pcs connect - shut down
 	{ok,set}.
@@ -55,7 +57,9 @@ handle_cast({timeout},State)->
 handle_cast({kill},_)->
 	{stop,normal,done};
 handle_cast({status,Index,Grid},ready)->
-	io:format("~p~n",[Grid]),
+	reset(Index),
+	[case Gender of male-> change(X,Y,$X); female-> change(X,Y,$O) end||{{X,Y},{_,Gender}}<-Grid],
+	ets:insert(location,{Index,Grid}),
 	{noreply,ready}.
 
 terminate(_,_)->
@@ -100,7 +104,7 @@ init_board(N,M,Board,Line,Save)->
 
 start_board(N,M)->
 	ets:new(db,[set,named_table]),
-	ets:insert(db,{board,init_board(N,M)}).
+	ets:insert(db,{board,init_board(N,M)}),
 	spawn(fun()->loop() end).
 	
 change(X,Y,C)->
@@ -122,6 +126,10 @@ change([[H|T1]|T],X,1,C,New,Line)-> %copy letters until x=1
 change([H|T],X,Y,C,New,Line)-> %copy lines until y=1
 	change(T,X,Y-1,C,New++[H],Line).
 
+reset(Index)->
+	[change(X,Y,$ )||{{X,Y},{_,Gender}}<-read(location,Index)].
+	
+
 wait(X)->
 	receive
 		after X-> ok
@@ -129,11 +137,11 @@ wait(X)->
 
 kill()->gen_server:stop(gs).
 
-loop1()->
+loop()->
 	receive
 		after 100-> ok
 	end,
 	[{board,B}]=ets:lookup(db,board),
 	print_board(B),
-	loop1().
+	loop().
 

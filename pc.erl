@@ -11,8 +11,8 @@ start_link(Num)->
 %init function, start the ets
 init([Num]) ->
 	io:format("init: ~p~n",[Num]),
-	ets:new(location,[set,named_table]),		    %for holding the process that will run in my corner
-	ets:new(param,[set,named_table]),		    %for paramters
+	ets:new(location,[set,named_table,public]),		    %for holding the process that will run in my corner
+	ets:new(param,[set,named_table,public]),	    %for paramters
 	ets:insert(param,{index,Num}),			    %add my number to ets, this number will say which corner in the map i manege
 	gen_server:cast({gs,?MAIN},{ready,Num,node()}),	    %send main im ready
 	{ok,set}.				            %done
@@ -21,19 +21,21 @@ init([Num]) ->
 %function that send the main the status if the pc with the location of all the proesses in this pc
 status()->
 	receive %wait
-	after 1000->ok
+	after 500->ok
 	end, %end wait
 	Location=ets:tab2list(location),		       	%save all locations ets in list
 	gen_server:cast({gs,?MAIN},{status,read(param,index),Location}),  	%send the ets with locations to main
 	status(). 
 %---------------------------------------------------------
 
-handle_call({walkreq,{X,Y}},_,ready)->
+handle_call({walkreq,Old,New},_,ready)->
 	%check if legal
-	
+	io:format("received walkreq~n"),
 	%update ets
-	
-	ets:insert(location,
+	[{Old,Data}]=ets:lookup(location,Old),
+	ets:delete(location,Old),
+	ets:insert(location,{New,Data}),
+	{reply,ok,ready}.
 
 
 %----kill-state----
@@ -73,7 +75,10 @@ handle_cast({cross,Gender,{X,Y}},ready)->
 	%----
 	{noreply,ready}.
 
-
+move(X,Y)->
+	[{{X,Y},{Pid,Gender}}]=ets:lookup(location,{X,Y}),
+	io:format("sending move~n"),
+	Pid!{move}.
 
 proccessFromUser()->ok.
 
