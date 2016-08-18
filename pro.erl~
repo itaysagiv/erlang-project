@@ -1,0 +1,5 @@
+-module(pro).
+-compile(export_all).
+
+start({X,Y},Gender)->
+	ok.

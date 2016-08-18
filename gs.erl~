@@ -10,6 +10,7 @@ start_link()->
 	gen_server:start_link({local,gs},gs,[],[]).
 
 init(_)->
+	%start_board(N,M),
 	ets:new(pc,[set,named_table]),
 	ets:new(param,[set,named_table]),
 	ets:insert(param,{connect_cnt,0}),
@@ -68,7 +69,6 @@ create(Gender,X,Y) when X<?M/2 , Y<?N/2->	[{pc1,From}]=ets:lookup(pc,pc1), gen_s
 create(Gender,X,Y) when X>=?M/2 , Y<?N/2->	[{pc2,From}]=ets:lookup(pc,pc2), gen_server:cast(From,{new,Gender,{X,Y}});
 create(Gender,X,Y) when X<?M/2 , Y>=?N/2->	[{pc3,From}]=ets:lookup(pc,pc3), gen_server:cast(From,{new,Gender,{X,Y}});
 create(Gender,X,Y) when X>=?M/2 , Y>=?N/2->	[{pc4,From}]=ets:lookup(pc,pc4), gen_server:cast(From,{new,Gender,{X,Y}}).
-	
 
 %------------------------------------------------------
 %-------------GRAPHICS --------------------------------
@@ -101,7 +101,7 @@ init_board(N,M,Board,Line,Save)->
 start_board(N,M)->
 	ets:new(db,[set,named_table]),
 	ets:insert(db,{board,init_board(N,M)}).
-	%spawn(fun()->loop() end).
+	spawn(fun()->loop() end).
 	
 change(X,Y,C)->
 	[{board,B}]=ets:lookup(db,board),
