@@ -1,12 +1,12 @@
 -module(pc).
 -behaviour(gen_server).
 -compile(export_all).
--define(MAIN,'main@asaf-VirtualBox').
+-define(MAIN,'main@itay-VirtualBox').
 
 %    starting the gen server and init it
 %---------------------------------------------------------
 start_link(Num)->
-	gen_server:start_link({local,Num},pc,[Num],[]).	%start gs
+	gen_server:start_link({local,gs},pc,[Num],[]).	%start gs
 
 %init function, start the ets
 init([Num]) ->
@@ -14,13 +14,8 @@ init([Num]) ->
 	ets:new(db_location,[bag,named_table]),		    %for holding the process that will run in my corner
 	ets:new(param,[set,named_table]),		    %for paramters
 	ets:insert(param,{index,Num}),			    %add my number to ets, this number will say which corner in the map i manege
-	gen_server:call({gs,?MAIN},{ready,Num}),	    %send main im ready
-	
+	gen_server:cast({gs,?MAIN},{ready,Num,node()}),	    %send main im ready
 	{ok,set}.				            %done
-
-handle_cast({ready},_,set)->io:format("connected to main"),
-	%spawn(fun()->status() end),
-	{noreply,set}.
 
 %          --Status--
 %function that send the main the status if the pc with the location of all the proesses in this pc
@@ -34,14 +29,22 @@ status()->
 %---------------------------------------------------------
 
 %----kill-state----
-terminate(normal,kill)->ok.   						% terminate the pc
-handle_call({kill},_,ready)->
+terminate(normal,kill)->
+	io:format("pc down~n"),	
+	ok.   						% terminate the pc
+handle_cast({kill},_)->
 	Location=ets:tab2list(db_location),		        	%save all locations ets in list
 	gen_server:cast({gs,?MAIN},{suicide,read(param,index),Location}),  	%send the ets with locations to main
 	ets:delete(location),ets:delete(param),				%delete the ets
-	{stop,normal,suicide}.						%message reply
+	{stop,normal,done};						%message reply
 						
 %-----------------
+
+
+handle_cast({readyack},set)->
+	io:format("connected to main~n"),
+	spawn_link(fun()->status() end),
+	{noreply,set};
 
 %from user
 handle_cast({new,Gender,{X,Y}},ready)->
@@ -77,7 +80,7 @@ read(Tab,Key)->
 write(Tab,Key,Val)->
 	ets:insert(Tab,{Key,Val}).
 
-
+kill()->gen_server:stop(gs).
 
 %mapBuild()->
 %	receive

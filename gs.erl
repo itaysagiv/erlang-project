@@ -4,10 +4,6 @@
 -define(PCS,2).
 -define(N,20).
 -define(M,40).
--define(PC1,'pc1@asaf-VirtualBox').
--define(PC2,'pc2@asaf-VirtualBox').
--define(PC3,'pc3@asaf-VirtualBox').
--define(PC4,'pc4@asaf-VirtualBox').
 
 %-------------------------------------
 start_link()->
@@ -17,23 +13,24 @@ init(_)->
 	ets:new(pc,[set,named_table]),
 	ets:new(param,[set,named_table]),
 	ets:insert(param,{connect_cnt,0}),
-	spawn(fun()->wait(50000),gen_server:cast(gs,{timeout}) end), %set timer to 5 sec - if not all 4 pcs connect - shut down
+	spawn_link(fun()->wait(50000),gen_server:cast(gs,{timeout}) end), %set timer to 5 sec - if not all 4 pcs connect - shut down
 	{ok,set}.
 %------------------------------------
 
-sendReady(0)->io:format("all pcs connected and givig status");
-sendReady(N)when N==4->[{pc4,From}]=ets:lookup(pc,pc4), gen_server:cast(From,{ready}),
-	sendReady(N-1);
-sendReady(N)when N==3->[{pc3,From}]=ets:lookup(pc,pc3), gen_server:cast(From,{ready}),
-	sendReady(N-1);
-sendReady(N)when N==2->[{pc2,From}]=ets:lookup(pc,pc2), gen_server:cast(From,{ready}),
-	sendReady(N-1);
-sendReady(N)when N==1->[{pc1,From}]=ets:lookup(pc,pc1), gen_server:cast(From,{ready}),
-	sendReady(N-1).
+%sends acks to all pc that connected so they start send status
+sendacks(0)->	io:format("all acks sent~n");
+sendacks(N)->
+	case N of
+		1->	[{pc1,Dest}]=ets:lookup(pc,pc1), gen_server:cast(Dest,{readyack});
+		2->	[{pc2,Dest}]=ets:lookup(pc,pc2), gen_server:cast(Dest,{readyack});	
+		3->	[{pc3,Dest}]=ets:lookup(pc,pc3), gen_server:cast(Dest,{readyack});		
+		4->	[{pc4,Dest}]=ets:lookup(pc,pc4), gen_server:cast(Dest,{readyack})
+	end,
+	sendacks(N-1).
 
 %wait for all 4 pc to connect
-handle_call({ready,I},From,set)->
-	ets:insert(pc,{I,From}), %save connected pc to ets
+handle_cast({ready,I,Node},set)->
+	ets:insert(pc,{I,{gs,Node}}), %save connected pc to ets
 	
 	%increment counter
 	[{connect_cnt,Tmp}]=ets:lookup(param,connect_cnt),
@@ -44,13 +41,9 @@ handle_call({ready,I},From,set)->
 
 	%if 4 pcs connected go to ready
 	case Tmp+1==?PCS of
-		false->	{reply,ack,set};
-		true->	gen_server:cast(gs,{go,Tmp+1}),{reply,ack,confirm}
-	end.
-
-handle_cast({go,N},confirm)->
-	sendReady(N),
-	{noreply,ready};
+		false->	{noreply,set};
+		true->	sendacks(?PCS),{noreply,ready}
+	end;
 
 %handles the time out in the setting
 handle_cast({timeout},set)->
@@ -64,8 +57,9 @@ handle_cast({status,Index,Grid},ready)->
 	io:format("~p~n",[Grid]),
 	{noreply,ready}.
 
-terminate(normal,_)->
-	io:format("server down~n").	
+terminate(_,_)->
+	io:format("server down~n"),
+	ok.	
 
 %------------------------------------------------------
 %-------------------UI --------------------------------
@@ -132,6 +126,8 @@ wait(X)->
 	receive
 		after X-> ok
 	end.
+
+kill()->gen_server:stop(gs).
 
 loop1()->
 	receive
