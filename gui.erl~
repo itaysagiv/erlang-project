@@ -1,10 +1,22 @@
 -module(gui).
 -compile(export_all).
 
+-include_lib("wx/include/wx.hrl").
+
 start()->
-	Server = wx:new(),
-	Frame  = wxFrame:new(Server,-1,"Baraka",[{size,{1300,600}}]),
-	Img = wxImage:new("index.jpg"),
-	Pic = wxImage:create(Img,1300,600),
-	wxImage:show(Pic),
+	S=wx:new(),
+	Parent = wxWindow:new(),
+	Panel = wxPanel:new(Parent, []),
+
+	%% Setup sizers
+	MainSizer = wxBoxSizer:new(?wxVERTICAL),
+	Sizer = wxStaticBoxSizer:new(?wxVERTICAL, Panel, 
+				 [{label, "Various shapes"}]),
+
+	Button = wxButton:new(Panel, ?wxID_ANY, [{label, "Redraw"}]),
+
+	Canvas = wxPanel:new(Panel, [{style, ?wxFULL_REPAINT_ON_RESIZE}]),
+
+	Frame = wxFrame:new(Parent,-1,"hello"),
 	wxFrame:show(Frame).
+

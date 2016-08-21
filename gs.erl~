@@ -2,15 +2,16 @@
 -behaviour(gen_server).
 -compile(export_all).
 -define(PCS,2).
--define(N,20).
--define(M,40).
+-define(N,600).
+-define(M,1000).
 
 %-------------------------------------
 start_link()->
 	gen_server:start_link({local,gs},gs,[],[]).
 
 init(_)->
-	start_board(?N,?M),
+	%start_board(?N,?M),
+	spawn_link(demo,start,[]),
 	ets:new(pc,[set,named_table]),
 	ets:new(param,[set,named_table]),
 	ets:new(location,[set,named_table]),
@@ -21,7 +22,7 @@ init(_)->
 %------------------------------------
 
 %sends acks to all pc that connected so they start send status
-sendacks(0)->	io:format("all acks sent~n");
+sendacks(0)->	io:format("all acks sent~n"),spawn_link(fun()->loop() end);
 sendacks(N)->
 	case N of
 		1->	[{pc1,Dest}]=ets:lookup(pc,pc1), gen_server:cast(Dest,{readyack});
@@ -57,8 +58,8 @@ handle_cast({timeout},State)->
 handle_cast({kill},_)->
 	{stop,normal,done};
 handle_cast({status,Index,Grid},ready)->
-	reset(Index),
-	[case Gender of male-> change(X,Y,$X); female-> change(X,Y,$O) end||{{X,Y},{_,Gender}}<-Grid],
+	%reset(Index),
+	%[case Gender of male-> change(X,Y,$X); female-> change(X,Y,$O) end||{{X,Y},{_,Gender}}<-Grid],
 	ets:insert(location,{Index,Grid}),
 	{noreply,ready}.
 
@@ -69,6 +70,10 @@ terminate(_,_)->
 %------------------------------------------------------
 %-------------------UI --------------------------------
 %------------------------------------------------------
+create()-> X=rand:uniform(?M),Y=rand:uniform(?N),case rand:uniform(2) of
+1->G=male;
+_->G=female end, create(G,X,Y).
+
 create(Gender,X,Y) when X<?M/2 , Y<?N/2->	[{pc1,From}]=ets:lookup(pc,pc1), gen_server:cast(From,{new,Gender,{X,Y}});	
 create(Gender,X,Y) when X>=?M/2 , Y<?N/2->	[{pc2,From}]=ets:lookup(pc,pc2), gen_server:cast(From,{new,Gender,{X,Y}});
 create(Gender,X,Y) when X<?M/2 , Y>=?N/2->	[{pc3,From}]=ets:lookup(pc,pc3), gen_server:cast(From,{new,Gender,{X,Y}});
@@ -137,11 +142,18 @@ wait(X)->
 
 kill()->gen_server:stop(gs).
 
+read(Tab,Key)->
+	[{Key,Val}]=ets:lookup(Tab,Key),
+	Val.
+
+write(Tab,Key,Val)->
+	ets:insert(Tab,{Key,Val}).
+
 loop()->
 	receive
 		after 100-> ok
 	end,
-	[{board,B}]=ets:lookup(db,board),
-	print_board(B),
+	%A=lists:flatten([[{{X,Y},Gender}||{{X,Y},{_Pid,Gender}}<-read(location,Pc)]||Pc<-[pc1|[pc2,pc3,pc4]]]),
+	canvas!{wx,-220,{wx_ref,74,wxButton,[]},[],{wxCommand,command_button_clicked,[],0,0}},
 	loop().
 

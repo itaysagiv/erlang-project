@@ -1,13 +1,13 @@
 -module(pc).
 -behaviour(gen_server).
 -compile(export_all).
--define(MAIN,'main@asaf-VirtualBox').
--define(N,20).
--define(M,40).
--define(PC1,'pc1@asaf-VirtualBox').
--define(PC2,'pc2@asaf-VirtualBox').
--define(PC3,'pc3@asaf-VirtualBox').
--define(PC4,'pc4@asaf-VirtualBox').
+-define(MAIN,'main@itay-VirtualBox').
+-define(N,600).
+-define(M,1000).
+-define(PC1,'pc1@itay-VirtualBox').
+-define(PC2,'pc2@itay-VirtualBox').
+-define(PC3,'pc3@itay-VirtualBox').
+-define(PC4,'pc4@itay-VirtualBox').
 %    starting the gen server and init it
 %---------------------------------------------------------
 start_link(Num)->

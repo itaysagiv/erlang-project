@@ -1,16 +1,17 @@
 -module(gs).
 -behaviour(gen_server).
 -compile(export_all).
--define(PCS,4).
--define(N,20).
--define(M,40).
+-define(PCS,2).
+-define(N,600).
+-define(M,1000).
 
 %-------------------------------------
 start_link()->
 	gen_server:start_link({local,gs},gs,[],[]).
 
 init(_)->
-	start_board(?N,?M),
+	%start_board(?N,?M),
+	spawn_link(demo,start,[]),
 	ets:new(pc,[set,named_table]),
 	ets:new(param,[set,named_table]),
 	ets:new(location,[set,named_table]),
@@ -21,7 +22,7 @@ init(_)->
 %------------------------------------
 
 %sends acks to all pc that connected so they start send status
-sendacks(0)->	io:format("all acks sent~n");
+sendacks(0)->	io:format("all acks sent~n"),spawn_link(fun()->loop() end);
 sendacks(N)->
 	case N of
 		1->	[{pc1,Dest}]=ets:lookup(pc,pc1), gen_server:cast(Dest,{readyack});
@@ -57,8 +58,8 @@ handle_cast({timeout},State)->
 handle_cast({kill},_)->
 	{stop,normal,done};
 handle_cast({status,Index,Grid},ready)->
-	reset(Index),
-	[case Gender of male-> change(X,Y,$X); female-> change(X,Y,$O) end||{{X,Y},{_,Gender}}<-Grid],
+	%reset(Index),
+	%[case Gender of male-> change(X,Y,$X); female-> change(X,Y,$O) end||{{X,Y},{_,Gender}}<-Grid],
 	ets:insert(location,{Index,Grid}),
 	{noreply,ready}.
 
@@ -152,7 +153,6 @@ loop()->
 	receive
 		after 100-> ok
 	end,
-	[{board,B}]=ets:lookup(db,board),
-	print_board(B),
+	canvas!{wx,-220,{wx_ref,74,wxButton,[]},[],{wxCommand,command_button_clicked,[],0,0}},
 	loop().
 
