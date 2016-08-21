@@ -1,7 +1,7 @@
 -module(gs).
 -behaviour(gen_server).
 -compile(export_all).
--define(PCS,2).
+-define(PCS,4).
 -define(N,20).
 -define(M,40).
 
@@ -69,6 +69,10 @@ terminate(_,_)->
 %------------------------------------------------------
 %-------------------UI --------------------------------
 %------------------------------------------------------
+create()-> X=rand:uniform(?M),Y=rand:uniform(?N),case rand:uniform(2) of
+1->G=male;
+_->G=female end, create(G,X,Y).
+
 create(Gender,X,Y) when X<?M/2 , Y<?N/2->	[{pc1,From}]=ets:lookup(pc,pc1), gen_server:cast(From,{new,Gender,{X,Y}});	
 create(Gender,X,Y) when X>=?M/2 , Y<?N/2->	[{pc2,From}]=ets:lookup(pc,pc2), gen_server:cast(From,{new,Gender,{X,Y}});
 create(Gender,X,Y) when X<?M/2 , Y>=?N/2->	[{pc3,From}]=ets:lookup(pc,pc3), gen_server:cast(From,{new,Gender,{X,Y}});
