@@ -1,7 +1,7 @@
 -module(gs).
 -behaviour(gen_server).
 -compile(export_all).
--define(PCS,1).
+-define(PCS,4).
 -define(N,600).
 -define(M,1000).
 
@@ -11,11 +11,11 @@ start_link()->
 
 init(_)->
 	%start_board(?N,?M),
-	spawn_link(demo,start,[]),
-	ets:new(pc,[set,named_table,public]),
-	ets:new(param,[set,named_table,public]),
-	ets:insert(param,{light,lightoff}),
-	ets:new(location,[set,named_table,public]),
+	spawn_link(demo,start,[]),				%set up the graphics
+	ets:new(pc,[set,named_table,public]),			%set ets to save pcs
+	ets:new(param,[set,named_table,public]),		%set ets to save the paramters
+	ets:insert(param,{light,lightoff}),			
+	ets:new(location,[set,named_table,public]),		%set ets to save locations
 	ets:insert(location,[{pc1,[]},{pc2,[]},{pc3,[]},{pc4,[]}]),
 	ets:insert(param,{connect_cnt,0}),
 	spawn_link(fun()->wait(50000),gen_server:cast(gs,{timeout}) end), %set timer to 5 sec - if not all 4 pcs connect - shut down
@@ -25,7 +25,7 @@ init(_)->
 %sends acks to all pc that connected so they start send status
 sendacks(0)->	io:format("all acks sent~n"),spawn_link(fun()->loop() end);
 sendacks(N)->
-	case N of
+	case N of	%for each pc
 		1->	[{pc1,Dest}]=ets:lookup(pc,pc1), gen_server:cast(Dest,{readyack});
 		2->	[{pc2,Dest}]=ets:lookup(pc,pc2), gen_server:cast(Dest,{readyack});	
 		3->	[{pc3,Dest}]=ets:lookup(pc,pc3), gen_server:cast(Dest,{readyack});		
@@ -47,7 +47,7 @@ handle_cast({ready,I,Node},set)->
 	%if 4 pcs connected go to ready
 	case Tmp+1==?PCS of
 		false->	{noreply,set};
-		true->	sendacks(?PCS),{noreply,ready}
+		true->	sendacks(?PCS),{noreply,ready} %all pcs are connected
 	end;
 
 %handles the time out in the setting
@@ -136,19 +136,22 @@ reset(Index)->
 	[change(X,Y,$ )||{{X,Y},{_,Gender}}<-read(location,Index)].
 	
 
-wait(X)->
+wait(X)->%function that make wait for X time
 	receive
 		after X-> ok
 	end.
 
-kill()->gen_server:stop(gs).
+kill()->gen_server:stop(gs).%killing the gs with gen server stop
 
+%--function to help handle ets easly--
+%-read: reading from the ets easliy with tab and key
+%-write: writing from the ets easliy with tab and key
 read(Tab,Key)->
 	[{Key,Val}]=ets:lookup(Tab,Key),
 	Val.
-
 write(Tab,Key,Val)->
 	ets:insert(Tab,{Key,Val}).
+%-------------------------------------
 
 loop()->
 	receive
@@ -157,6 +160,7 @@ loop()->
 	canvas!{wx,-220,{wx_ref,74,wxButton,[]},[],{wxCommand,command_button_clicked,[],0,0}},
 	loop().
 
+%--function for light in the dance floor--
 light(Time)->
 	light([light1,light2,light3|[]],0,Time*2).
 light(_,N,N)->
@@ -164,4 +168,5 @@ light(_,N,N)->
 light([H|T],N,Stop)->
 	ets:insert(param,{light,H}),
 	wait(500),
+%------------------------------------------
 	light(T++[H],N+1,Stop).

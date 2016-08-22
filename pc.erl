@@ -45,7 +45,10 @@ checkMove({_,Y},{_,_},{Ymin,_})when Y<Ymin->%up
 	[{Check,Tmp}]=ets:lookup(borders,up),{up,Tmp};
 checkMove({_,Y},{_,_},{_,Ymax})when Y>Ymax->%down
 	[{Check,Tmp}]=ets:lookup(borders,down),{down,Tmp};
-checkMove(_,_,_)->{ok,freespace}.
+checkMove({X,Y},_,_)->case ets:lookup(location,{X,Y}) of
+	[]->{ok,freespace};
+	_->{ok,person}
+end.
 
 
 checkBar(PC,{X,Y})->ok.
@@ -62,6 +65,7 @@ handle_call({walkreq,Old,New,ProPid},_,ready)->
 	case CrossPC of %reply the process the ack with the details for is requset
 		bar->io:format("sent bar to the process~n"),{reply,bar,ready};
 		wall->io:format("sent wall to the process~n"),{reply,wall,ready};
+		person->io:format("sent person to the process~n"),{reply,person,ready};
 		freespace->io:format("sent freespace to the process~n"),
 	%update ets
 		[{Old,Data}]=ets:lookup(location,Old),
@@ -75,18 +79,28 @@ handle_call({walkreq,Old,New,ProPid},_,ready)->
 			_->{reply,wall,ready}
 		end	
 	end;
-
+%cross call, when process want to move to other pc. the pc check if he can, if so, he create him
+%in his pc location.
 handle_call({cross,{Xold,Yold},Dir,Gender,Rank},_,ready)->
-	case Dir of
+	case Dir of 
 		up->X=Xold,Y=Yold-1;
 		down->X=Xold,Y=Yold+1;
 		right->X=Xold+1,Y=Yold;
 		left->X=Xold-1,Y=Yold
 	end,
-	Pid = spawn(pro,start,[{X,Y},Gender,Rank]),
-	ets:insert(location,{{X,Y},{Pid,Gender}}),
-	io:format("process moved to:{~p,~p}~n",[X,Y]),
-	{reply,ok,ready}.
+	case ets:lookup(location,{X,Y}) of
+		[]->Pid = spawn(pro,start,[{X,Y},Gender,Rank]),
+		ets:insert(location,{{X,Y},{Pid,Gender}}),
+		io:format("process moved to:{~p,~p}~n",[X,Y]),
+		{reply,ok,ready};
+		_->wait(50),case ets:lookup(location,{X,Y}) of
+			[]->Pid = spawn(pro,start,[{X,Y},Gender,Rank]),
+			ets:insert(location,{{X,Y},{Pid,Gender}}),
+			io:format("process moved to:{~p,~p}~n",[X,Y]),
+			{reply,ok,ready};
+			_->{reply,dont,ready} 
+		end
+	end.
 
 %----kill-state----
 terminate(_,_)->
@@ -149,41 +163,6 @@ setBounds(PC)->
 	pc4->ets:insert(param,{bounds,{{(?M/2)+1,?M},{(?N/2)+1,?N}}})
 	end.
 
-%---cross-table---
-%cross for pc1
-%checkCross1({X,Y})when X=<(?M)/4,Y==0->bar;
-%checkCross1({X,Y})when Y=<(?N)/4,X==0->bar;
-%checkCross1({X,Y})when Y==0;X==0->wall;
-%checkCross1({X,Y})when X>(?M)/2,Y>(?N)/2->pc4;
-%checkCross1({_,Y})when Y>(?N)/2->pc3;
-%checkCross1({X,_})when X>(?M)/2->pc2;
-%checkCross1(_)->freespace.
-%cross for pc2
-%checkCross2({X,Y})when X>=3*(?M)/4,Y==0->bar;
-%checkCross2({X,Y})when Y=<(?N)/4,X==41->bar;
-%checkCross2({X,Y})when Y==0;X==?M+1->wall;
-%checkCross2({X,Y})when X=<(?M)/2,Y>(?N)/2->pc3;
-%checkCross2({_,Y})when Y>(?N)/2->pc4;
-%checkCross2({X,_})when X=<(?M)/2->pc1;
-%checkCross2(_)->freespace.
-%cross for pc3
-%checkCross3({X,Y})when X=<(?M)/4,Y==21->bar;
-%checkCross3({X,Y})when Y>=3*(?N)/4,X==0->bar;
-%checkCross3({X,Y})when Y==?N+1;X==0->wall;
-%checkCross3({X,Y})when X>(?M)/2,Y=<(?N)/2->pc2;
-%checkCross3({_,Y})when Y=<(?N)/2->pc1;
-%checkCross3({X,_})when X>(?M)/2->pc4;
-%checkCross3(_)->freespace.
-%cross for pc4
-%checkCross4({X,Y})when X>=3*(?M)/4,Y==21->bar;
-%checkCross4({X,Y})when Y>=3*(?N)/4,X==41->bar;
-%checkCross4({X,Y})when Y==?N+1;X==?M+1->wall;
-%checkCross4({X,Y})when X=<(?M)/2,Y=<(?N)/2->pc1;
-%checkCross4({_,Y})when Y=<(?N)/2->pc2;
-%checkCross4({X,_})when X=<(?M)/2->pc3;
-%checkCross4(_)->freespace.
-%----------------
-
 
 read(Tab,Key)->
 	[{Key,Val}]=ets:lookup(Tab,Key),
@@ -194,16 +173,7 @@ write(Tab,Key,Val)->
 
 kill()->gen_server:stop(gs).
 
-%mapBuild()->
-%	receive
-%	{0,0}->%bar need to be in (0-10,0-5)
-%
-%	{0,20}->%bar need to be in (0-10,20-15)
-%
-%	{10,0}->%bar need to be in (30-40,0-5)
-%
-%	{10,20}->%bar need to be in (30-40,20-15)
-% 	_->error end.
+
 
 heart(X,Y)->
 	spawn(pc,heart,[X,Y,[h1,h2,h3,h4,h5,h6|[]] ]).

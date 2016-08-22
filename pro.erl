@@ -14,8 +14,8 @@ start({X,Y},Gender,Rank)->
 
 
 move()->
-	MoveX = (rand:uniform(3)-2)*3,
-	MoveY = (rand:uniform(3)-2)*3,
+	MoveX =(rand:uniform(3)-2)*3,
+	MoveY =(rand:uniform(3)-2)*3,
 	io:format("random: X=~p Y=~p~n",[MoveX,MoveY]),
 	Pid=self(),
 	[{{Pid,curr},{OldX,OldY}}]=ets:lookup(param,{Pid,curr}),
@@ -24,6 +24,7 @@ move()->
 		io:format("process ~p now at X=~p Y=~p~n",[Pid,OldX+MoveX,OldY+MoveY]),move();
 		bar->write(param,{Pid,curr},{OldX,OldY}),wait(100),move();
 		wall->write(param,{Pid,curr},{OldX,OldY}),wait(100),move();
+		person->write(param,{Pid,curr},{OldX,OldY}),move();
 		cross->ok
 	end.
 
