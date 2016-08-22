@@ -1,7 +1,7 @@
 -module(gs).
 -behaviour(gen_server).
 -compile(export_all).
--define(PCS,2).
+-define(PCS,1).
 -define(N,600).
 -define(M,1000).
 
@@ -12,9 +12,10 @@ start_link()->
 init(_)->
 	%start_board(?N,?M),
 	spawn_link(demo,start,[]),
-	ets:new(pc,[set,named_table]),
-	ets:new(param,[set,named_table]),
-	ets:new(location,[set,named_table]),
+	ets:new(pc,[set,named_table,public]),
+	ets:new(param,[set,named_table,public]),
+	ets:insert(param,{light,lightoff}),
+	ets:new(location,[set,named_table,public]),
 	ets:insert(location,[{pc1,[]},{pc2,[]},{pc3,[]},{pc4,[]}]),
 	ets:insert(param,{connect_cnt,0}),
 	spawn_link(fun()->wait(50000),gen_server:cast(gs,{timeout}) end), %set timer to 5 sec - if not all 4 pcs connect - shut down
@@ -156,3 +157,11 @@ loop()->
 	canvas!{wx,-220,{wx_ref,74,wxButton,[]},[],{wxCommand,command_button_clicked,[],0,0}},
 	loop().
 
+light(Time)->
+	light([light1,light2,light3|[]],0,Time*2).
+light(_,N,N)->
+	ets:insert(param,{light,lightoff});
+light([H|T],N,Stop)->
+	ets:insert(param,{light,H}),
+	wait(500),
+	light(T++[H],N+1,Stop).

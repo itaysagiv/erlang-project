@@ -14,18 +14,18 @@ start({X,Y},Gender,Rank)->
 
 
 move()->
-	%MoveX = rand:uniform(3)-2,
-	%MoveY = rand:uniform(3)-2,
+	MoveX = (rand:uniform(3)-2)*3,
+	MoveY = (rand:uniform(3)-2)*3,
 	MoveX=1,
 	MoveY=0,
 	io:format("random: X=~p Y=~p~n",[MoveX,MoveY]),
 	Pid=self(),
 	[{{Pid,curr},{OldX,OldY}}]=ets:lookup(param,{Pid,curr}),
 	case gen_server:call(gs,{walkreq,{OldX,OldY},{OldX+MoveX,OldY+MoveY},Pid}) of
-		ok->	io:format("got ok~n"),write(param,{Pid,curr},{OldX+MoveX,OldY+MoveY}),wait(1000),
+		ok->	io:format("got ok~n"),write(param,{Pid,curr},{OldX+MoveX,OldY+MoveY}),wait(100),
 		io:format("process ~p now at X=~p Y=~p~n",[Pid,OldX+MoveX,OldY+MoveY]),move();
-		bar->write(param,{Pid,curr},{OldX,OldY}),wait(1000),move();
-		wall->write(param,{Pid,curr},{OldX,OldY}),wait(1000),move();
+		bar->write(param,{Pid,curr},{OldX,OldY}),wait(100),move();
+		wall->write(param,{Pid,curr},{OldX,OldY}),wait(100),move();
 		cross->ok
 	end.
 

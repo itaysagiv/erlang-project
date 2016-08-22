@@ -74,7 +74,7 @@ init(Options) ->
     wx:new(Options),
     process_flag(trap_exit, true),
 
-    Frame = wxFrame:new(wx:null(), ?wxID_ANY, "Baraka", [{size,{1000,600}}]),
+    Frame = wxFrame:new(wx:null(), ?wxID_ANY, "Baraka", [{size,{1050,650}}]),
 
 
     wxFrame:connect(Frame, command_menu_selected),
@@ -166,7 +166,7 @@ init(Options) ->
     {Frame, State#state{example=ExampleObj}}.
 
 create_subwindow(Parent, BoxLabel, Funs) ->
-    Panel = wxPanel:new(Parent,[{size,{1000,600}}]),
+    Panel = wxPanel:new(Parent,[{size,{1050,650}}]),
     Sz    = wxStaticBoxSizer:new(?wxVERTICAL, Panel, [{label, BoxLabel}]),
     wxPanel:setSizer(Panel, Sz),
     Ctrls = [Fun(Panel) || Fun <- Funs],

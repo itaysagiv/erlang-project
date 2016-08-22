@@ -50,6 +50,26 @@ init(Config) ->
 do_init(Config) ->
 	Pid=self(),
 	register(canvas,Pid),
+	
+	Div = fun(X,Y)-> X div Y end,
+	Multi = fun(X,Y)-> X*Y end,
+	%import Pics to ets
+	ets:new(pics,[set,named_table]),
+	ets:insert(pics,[{bg,imgToBmp("dancefloor2.png",Multi,1)},
+			{lightoff,imgToBmp("lightoff.png",Multi,1)},
+			{light1,imgToBmp("light1.png",Multi,1)},
+			{light2,imgToBmp("light2.png",Multi,1)},
+			{light3,imgToBmp("light3.png",Multi,1)},
+			{male,imgToBmp("male.png",Div,10)},
+			{female,imgToBmp("female.png",Div,10)},
+			{h1,imgToBmp("heart1.png",Div,10)},
+			{h2,imgToBmp("heart2.png",Div,10)},
+			{h3,imgToBmp("heart3.png",Div,10)},
+			{h4,imgToBmp("heart4.png",Div,10)},
+			{h5,imgToBmp("heart5.png",Div,10)},
+			{h6,imgToBmp("heart6.png",Div,10)}]),
+		
+	
     Parent = proplists:get_value(parent, Config),  
     Panel = wxPanel:new(Parent, []),
 
@@ -58,7 +78,7 @@ do_init(Config) ->
     Sizer = wxStaticBoxSizer:new(?wxVERTICAL, Panel, 
 				 [{label, ""}]),
 
-    Button = wxButton:new(Panel, ?wxID_ANY, [{label, "Start"}]),
+    Button = wxButton:new(wx:null(), ?wxID_ANY, [{label, "Start"}]),
 
     Canvas = wxPanel:new(Panel, [{style, ?wxFULL_REPAINT_ON_RESIZE}]),
 
@@ -181,48 +201,26 @@ get_pos(W,H) ->
     {random:uniform(W), random:uniform(H)}.
 
 print(State,Positions)->
-	%import background
-    Imagebg = wxImage:new("index.jpeg"),
-    Image2bg = wxImage:scale(Imagebg, wxImage:getWidth(Imagebg)*3,
-			   wxImage:getHeight(Imagebg)*3),
-    Bg = wxBitmap:new(Image2bg),
-    wxImage:destroy(Imagebg),
-    wxImage:destroy(Image2bg),
-	
-	%import male png
-    ImageMale = wxImage:new("male.png"),
-    Image2Male = wxImage:scale(ImageMale, wxImage:getWidth(ImageMale) div 20,
-			   wxImage:getHeight(ImageMale) div 20),
-    Male = wxBitmap:new(Image2Male),
-    wxImage:destroy(ImageMale),
-    wxImage:destroy(Image2Male),
-	%import female png
-    ImageFemale = wxImage:new("female.png"),
-    Image2Female = wxImage:scale(ImageFemale, wxImage:getWidth(ImageFemale) div 20,
-			   wxImage:getHeight(ImageFemale) div 20),
-    Female = wxBitmap:new(Image2Female),
-    wxImage:destroy(ImageFemale),
-    wxImage:destroy(Image2Female),
+
 
     {W,H} = wxPanel:getSize(State#state.canvas),
    	
     Fun = fun(DC) ->
 		  wxDC:clear(DC),
 		  lists:foreach(fun({{X,Y}=Pos,Pic}) ->
-					wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
-					wxDC:setPen(DC, wxPen:new(?wxBLACK, [{width, 2}])),
-					case Pic of
-					    bg-> wxDC:drawBitmap(DC, Bg, Pos);
-					    male -> wxDC:drawBitmap(DC, Male, Pos);
-					    female -> wxDC:drawBitmap(DC, Female, Pos)
-						
-					end
-				end, [{{0,0},bg}]++Positions)
+					wxDC:drawBitmap(DC,read(pics,Pic),Pos)
+				end, [{{0,0},bg},{{350,150},read(param,light)}]++Positions)
 	  end,
-    draw(State#state.canvas, State#state.bitmap, Fun),    
-    wxBitmap:destroy(Female),
-    wxBitmap:destroy(Male),
-    wxBitmap:destroy(Bg).
+    draw(State#state.canvas, State#state.bitmap, Fun).
+
+imgToBmp(String,Fun,Factor)->
+    Image = wxImage:new(String),
+    Image2 = wxImage:scale(Image, Fun(wxImage:getWidth(Image),Factor),
+			   Fun(wxImage:getHeight(Image),Factor)),
+    Bmp = wxBitmap:new(Image2),
+    wxImage:destroy(Image),
+    wxImage:destroy(Image2),
+    Bmp.	
 
 read(Tab,Key)->
 	[{Key,Val}]=ets:lookup(Tab,Key),

@@ -29,7 +29,7 @@ init([Num]) ->
 %function that send the main the status if the pc with the location of all the proesses in this pc
 status()->
 	receive %wait
-	after 500->ok
+	after 50->ok
 	end, %end wait
 	Location=ets:tab2list(location),		       	%save all locations ets in list
 	gen_server:cast({gs,?MAIN},{status,read(param,index),Location}),  	%send the ets with locations to main
@@ -205,4 +205,15 @@ kill()->gen_server:stop(gs).
 %	{10,20}->%bar need to be in (30-40,20-15)
 % 	_->error end.
 
+heart(X,Y)->
+	spawn(pc,heart,[X,Y,[h1,h2,h3,h4,h5,h6|[]] ]).
+heart(X,Y,[])-> ets:delete(location,{X,Y});
+heart(X,Y,[H|T])->
+	ets:insert(location,{{X,Y},{1,H}}),
+	wait(100),
+	heart(X,Y,T).
 
+wait(X)->
+	receive
+		after X-> ok
+	end.

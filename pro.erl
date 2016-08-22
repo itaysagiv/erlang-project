@@ -14,10 +14,8 @@ start({X,Y},Gender,Rank)->
 
 
 move()->
-	%MoveX = rand:uniform(3)-2,
-	%MoveY = rand:uniform(3)-2,
-	MoveX=1,
-	MoveY=0,
+	MoveX = (rand:uniform(3)-2)*3,
+	MoveY = (rand:uniform(3)-2)*3,
 	io:format("random: X=~p Y=~p~n",[MoveX,MoveY]),
 	Pid=self(),
 	[{{Pid,curr},{OldX,OldY}}]=ets:lookup(param,{Pid,curr}),
