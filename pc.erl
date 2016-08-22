@@ -210,7 +210,7 @@ heart(X,Y)->
 heart(X,Y,[])-> ets:delete(location,{X,Y});
 heart(X,Y,[H|T])->
 	ets:insert(location,{{X,Y},{1,H}}),
-	wait(100),
+	wait(200),
 	heart(X,Y,T).
 
 wait(X)->
