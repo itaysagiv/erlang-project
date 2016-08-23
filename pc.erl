@@ -21,7 +21,7 @@ init([Num]) ->
 	ets:new(location,[set,named_table,public]),	    %for holding the process that will run in my corner
 	ets:new(param,[set,named_table,public]),	    %for paramters
 	ets:insert(param,{index,Num}),			    %add my number to ets, this number will say which corner in the map i manege
-	ets:insent(param,{proc_id,1}),
+	ets:insert(param,{proc_id,1}),
 	setBounds(Num),					    %set bounds for each PC
 	gen_server:cast({gs,?MAIN},{ready,Num,node()}),	    %send main im ready
 	{ok,set}.				            %done
@@ -192,7 +192,13 @@ wait(X)->
 
 newProc({X,Y},Gender,Rank)->
 	Cnt = read(param,proc_id),
-	spawn(proc,start_link,[Cnt,{{X,Y},Gender,Rank}]),
+	Pc = case read(param,index) of
+		pc1->?PC1;
+		pc2->?PC2;
+		pc3->?PC3;
+		pc4->?PC4
+	end,
+	spawn(proc,start_link,[Cnt,{{X,Y},Gender,Rank},Pc]),
 	write(param,proc_id,Cnt+1),
 	toAtom(Cnt+1).
 

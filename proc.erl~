@@ -2,36 +2,72 @@
 -compile(export_all).
 -behaviour(gen_statem).
 -define(CB_MODE, handle_event_function).
+-define(STEP_SIZE, 3).
 
-start_link(Reg,{{X,Y},Gender,Rank}=Data)->
-	gen_statem:start_link({local,toAtom(Reg)},proc,[Data,toAtom(Reg)],[]).
+start_link(Reg,{{X,Y},Gender,Rank}=Data,Pc)->
+	gen_statem:start_link({local,toAtom(Reg)},proc,[Data,toAtom(Reg),Pc],[]).
 
-init([{{X,Y},Gender,Rank},Reg])->
+init([{{X,Y},Gender,Rank},Reg,Pc])->
 	io:format("started process in ~p~n",[Reg]),
-	%ets:insert(param,{{Reg,curr},{X,Y}}),
-	%ets:insert(param,{{Reg,gender},Gender}),
-	%case Rank of
-	%-1 -> ets:insert(param,{{Reg,rank},rand:uniform(5)+2});
-	%_->ets:insert(param,{{Reg,rank},Rank})
-	%end,
+	ets:insert(param,{{Reg,curr},{X,Y}}),
+	ets:insert(param,{{Reg,gender},Gender}),
+	case Rank of
+	-1 -> ets:insert(param,{{Reg,rank},rand:uniform(5)+2});
+	_->ets:insert(param,{{Reg,rank},Rank})
+	end,
+	ets:insert(param,{{Reg,cv},ready}),
 	Dir = rand:uniform(8),
-	Data = #{cv=>ready,dir=>Dir,reg=>Reg},
+	Data = #{cv=>ready,dir=>Dir,id=>Reg, pc=>Pc},
+	spawn_link(fun()->step(Reg) end),
 	{?CB_MODE,walk,Data}.
 
 handle_event(cast,{light,Time},walk,Data)->
 	io:format("got light~n"),
-	{next_state,stop,Data#{cv := bo}}.
-	
+	{next_state,stop,Data#{cv := bo}};
 
+handle_event(cast,step,stop,Data)->
+	{keep_state,Data};
 
-step(#{reg := Reg , cv := Cv})->
-	
+handle_event(cast,step,walk,#{dir := Dir, pc := Pc , id := Id , cv := Cv}=Data)->
+	{X,Y} = read(param,{Id,curr}),
+	{Xoffset,Yoffset} = case Dir of
+				1-> {1,0};
+				2-> {1,1};
+				3-> {0,1};
+				4-> {-1,1};
+				5-> {-1,0};
+				6-> {-1,-1};
+				7-> {0,-1};
+				8-> {1,-1}
+				end,
+	New = {X+?STEP_SIZE*Xoffset,Y+?STEP_SIZE*Yoffset},
+	Old = {X,Y},
+	Gender = read(param,{Id,gender}),	
+	gen_server:cast({gs,Pc},{walkreq,Old,New,Id,Cv,Gender}),
+	{keep_state,Data}.
 
-timer(X,#{reg := Reg})->
+step(Id)->
+	wait(100),
+	gen_statem:cast(Id,step),
+	step(Id).
+
+timer(X,#{id := Id})->
 	receive
 		after X -> ok
 	end,
-	gen_statem:cast(Reg,{to}).
+	gen_statem:cast(Id,{to}).
 
 toAtom(Term)->
 	list_to_atom(lists:flatten(io_lib:format("~p", [Term]))).
+
+wait(X)->
+	receive
+		after X-> ok
+	end.
+
+read(Tab,Key)->
+	[{Key,Val}]=ets:lookup(Tab,Key),
+	Val.
+
+write(Tab,Key,Val)->
+	ets:insert(Tab,{Key,Val}).

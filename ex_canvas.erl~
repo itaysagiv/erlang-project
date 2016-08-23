@@ -209,7 +209,7 @@ print(State,Positions)->
 		  wxDC:clear(DC),
 		  lists:foreach(fun({{X,Y}=Pos,Pic}) ->
 					wxDC:drawBitmap(DC,read(pics,Pic),Pos)
-				end, [{{0,0},bg},{{350,150},read(param,light)}]++Positions)
+				end, [{{0,0},bg},{{350,150},read(param,light)}++Positions])%add two upper bars]++Positions++[%{{X,Y},name}%add two lower bars])
 	  end,
     draw(State#state.canvas, State#state.bitmap, Fun).
 
