@@ -1,7 +1,7 @@
 -module(gs).
 -behaviour(gen_server).
 -compile(export_all).
--define(PCS,4).
+-define(PCS,1).
 -define(N,600).
 -define(M,1000).
 

@@ -62,12 +62,12 @@ do_init(Config) ->
 			{light3,imgToBmp("light3.png",Multi,1)},
 			{male,imgToBmp("male.png",Div,10)},
 			{female,imgToBmp("female.png",Div,10)},
-			{h1,imgToBmp("heart1.png",Div,10)},
-			{h2,imgToBmp("heart2.png",Div,10)},
-			{h3,imgToBmp("heart3.png",Div,10)},
-			{h4,imgToBmp("heart4.png",Div,10)},
-			{h5,imgToBmp("heart5.png",Div,10)},
-			{h6,imgToBmp("heart6.png",Div,10)}]),
+			{h1,imgToBmp("heart1.png",Div,5)},
+			{h2,imgToBmp("heart2.png",Div,5)},
+			{h3,imgToBmp("heart3.png",Div,5)},
+			{h4,imgToBmp("heart4.png",Div,5)},
+			{h5,imgToBmp("heart5.png",Div,5)},
+			{h6,imgToBmp("heart6.png",Div,5)}]),
 		
 	
     Parent = proplists:get_value(parent, Config),  

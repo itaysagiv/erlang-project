@@ -1,13 +1,13 @@
 -module(pc).
 -behaviour(gen_server).
 -compile(export_all).
--define(MAIN,'main@asaf-VirtualBox').
+-define(MAIN,'main@itay-VirtualBox').
 -define(N,600).
 -define(M,1000).
--define(PC1,'pc1@asaf-VirtualBox').
--define(PC2,'pc2@asaf-VirtualBox').
--define(PC3,'pc3@asaf-VirtualBox').
--define(PC4,'pc4@asaf-VirtualBox').
+-define(PC1,'pc1@itay-VirtualBox').
+-define(PC2,'pc2@itay-VirtualBox').
+-define(PC3,'pc3@itay-VirtualBox').
+-define(PC4,'pc4@itay-VirtualBox').
 %    starting the gen server and init it
 %---------------------------------------------------------
 start_link(Num)->
@@ -21,6 +21,7 @@ init([Num]) ->
 	ets:new(location,[set,named_table,public]),	    %for holding the process that will run in my corner
 	ets:new(param,[set,named_table,public]),	    %for paramters
 	ets:insert(param,{index,Num}),			    %add my number to ets, this number will say which corner in the map i manege
+	ets:insent(param,{proc_id,1}),
 	setBounds(Num),					    %set bounds for each PC
 	gen_server:cast({gs,?MAIN},{ready,Num,node()}),	    %send main im ready
 	{ok,set}.				            %done
@@ -50,35 +51,6 @@ checkMove({X,Y},_,_)->case ets:lookup(location,{X,Y}) of
 	_->{ok,person}
 end.
 
-
-checkBar(PC,{X,Y})->ok.
-	
-handle_call({walkreq,Old,New,ProPid},_,ready)->
-	io:format("received walkreq~n"),
-	[{_Ind,TmpPc}]=ets:lookup(param,index),
-	[{_Bounds,{{Xmin,Xmax},{Ymin,Ymax}}}]=ets:lookup(param,bounds),
-	{Dir,CrossPC}=checkMove(New,{Xmin,Xmax},{Ymin,Ymax}),
-
-	io:format("~p:~p~n",[Dir,CrossPC]),
-
-
-	case CrossPC of %reply the process the ack with the details for is requset
-		bar->io:format("sent bar to the process~n"),{reply,bar,ready};
-		wall->io:format("sent wall to the process~n"),{reply,wall,ready};
-		person->io:format("sent person to the process~n"),{reply,person,ready};
-		freespace->io:format("sent freespace to the process~n"),
-	%update ets
-		[{Old,Data}]=ets:lookup(location,Old),
-		ets:delete(location,Old),
-		ets:insert(location,{New,Data}),
-		{reply,ok,ready};
-		_->io:format("sent cross to the process~n"),
-
-		case gen_server:call({gs,CrossPC},{cross,Old,Dir,read(param,{ProPid,gender}),read(param,{ProPid,rank})}) of
-			ok->ets:delete(location,Old),{reply,cross,ready};%if cross, the process kill himself
-			_->{reply,wall,ready}
-		end	
-	end;
 %cross call, when process want to move to other pc. the pc check if he can, if so, he create him
 %in his pc location.
 handle_call({cross,{Xold,Yold},Dir,Gender,Rank},_,ready)->
@@ -89,13 +61,13 @@ handle_call({cross,{Xold,Yold},Dir,Gender,Rank},_,ready)->
 		left->X=Xold-1,Y=Yold
 	end,
 	case ets:lookup(location,{X,Y}) of
-		[]->Pid = spawn(pro,start,[{X,Y},Gender,Rank]),
-		ets:insert(location,{{X,Y},{Pid,Gender}}),
+		[]->Id = newProc({X,Y},Gender,Rank),
+		ets:insert(location,{{X,Y},{Id,Gender}}),
 		io:format("process moved to:{~p,~p}~n",[X,Y]),
 		{reply,ok,ready};
 		_->wait(50),case ets:lookup(location,{X,Y}) of
-			[]->Pid = spawn(pro,start,[{X,Y},Gender,Rank]),
-			ets:insert(location,{{X,Y},{Pid,Gender}}),
+			[]->Id = newProc({X,Y},Gender,Rank),
+			ets:insert(location,{{X,Y},{Id,Gender}}),
 			io:format("process moved to:{~p,~p}~n",[X,Y]),
 			{reply,ok,ready};
 			_->{reply,dont,ready} 
@@ -123,26 +95,56 @@ handle_cast({readyack},set)->
 %from user
 handle_cast({new,Gender,{X,Y}},ready)->
 	%insert to ets + check close to other process (smell or contact)
-	Pid = spawn(pro,start,[{X,Y},Gender,-1]),
-	ets:insert(location,{{X,Y},{Pid,Gender}}),
+	Id = newProc({X,Y},Gender,-1),
+	ets:insert(location,{{X,Y},{Id,Gender}}),
 	io:format("new proc: ~p in {~p,~p}~n",[Gender,X,Y]),
 	{noreply,ready};
+ 	
+handle_cast({walkreq,Old,New,Id,Cv,Gender},ready)->
+	io:format("received walkreq~n"),
+	case read(param,{Id,cv}) of
+		busy-> Reply=noreply;
+		_->
+		[{bounds,{{Xmin,Xmax},{Ymin,Ymax}}}]=ets:lookup(param,bounds),
+		{Dir,CrossPC}=checkMove(New,{Xmin,Xmax},{Ymin,Ymax}),
+
+		io:format("~p:~p~n",[Dir,CrossPC]),
 
 
-%from other pc
-handle_cast({cross,Gender,{X,Y},Rank},ready)->
-	
-	%insert to ets + check close to other process (smell or contact)
-	Pid = spawn(pro,start,[{X,Y},Gender,Rank]),
-	ets:insert(location,{{X,Y},{Pid,Gender}}),
-	io:format("process moved to:{~p,~p}~n",[X,Y]),
-	
+		Reply=case CrossPC of %reply the process the ack with the details for is requset
+			bar-> io:format("sent bar to the process~n"),
+				case Cv of
+					ready->{bar};
+					bo-> {wall}
+				end;
+			wall->io:format("sent wall to the process~n"),
+				{wall};
+			person->io:format("sent person to the process~n"),
+				{OtherId,OtherGender} = read(location,New),
+				OtherCv = read(param,{OtherId,cv}),
+				case {Cv,OtherCv} of
+					{Cv,OtherCv} when Cv==bo;OtherCv/=ready->	gen_statem:cast(OtherId,{inter,Id,Gender}),
+											{inter,OtherId,OtherGender};
+					_-> {wall}
+				end;
+			freespace->io:format("sent freespace to the process~n"),
+				%update ets
+				[{Old,Data}]=ets:lookup(location,Old),
+				ets:delete(location,Old),
+				ets:insert(location,{New,Data}),
+				noreply;
+			_->io:format("sent cross to the process~n"),
+				case gen_server:call({gs,CrossPC},{cross,Old,Dir,Gender,read(param,{Id,rank})}) of
+					ok->ets:delete(location,Old),gen_statem:stop(Id),noreply;%if cross, kill the process
+					_->{wall}
+				end	
+		end
+	end,
+	case Reply of
+		noreply-> ok;
+		Msg->	gen_statem:cast(Id,Msg)
+	end,
 	{noreply,ready}.
-
-move(X,Y)->
-	[{{X,Y},{Pid,Gender}}]=ets:lookup(location,{X,Y}),
-	io:format("sending move~n"),
-	Pid!{move}.
 
 % for each pc, set what he see in the board, in the init stage
 makeBorders(PC)->
@@ -187,3 +189,12 @@ wait(X)->
 	receive
 		after X-> ok
 	end.
+
+newProc({X,Y},Gender,Rank)->
+	Cnt = read(param,proc_id),
+	spawn(proc,start_link,[Cnt,{{X,Y},Gender,Rank}]),
+	write(param,proc_id,Cnt+1),
+	toAtom(Cnt+1).
+
+toAtom(Term)->
+	list_to_atom(lists:flatten(io_lib:format("~p", [Term]))).
