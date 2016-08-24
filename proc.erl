@@ -30,6 +30,7 @@ handle_event(cast,step,stop,Data)->
 
 handle_event(cast,step,walk,#{dir := Dir, pc := Pc , id := Id , cv := Cv}=Data)->
 	{X,Y} = read(param,{Id,curr}),
+	
 	{Xoffset,Yoffset} = case Dir of
 				1-> {1,0};
 				2-> {1,1};

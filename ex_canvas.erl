@@ -55,7 +55,7 @@ do_init(Config) ->
 	Multi = fun(X,Y)-> X*Y end,
 	%import Pics to ets
 	ets:new(pics,[set,named_table]),
-	ets:insert(pics,[{bg,imgToBmp("dancefloor2.png",Multi,1)},
+	ets:insert(pics,[{bg,imgToBmp("dancefloor.png",Multi,1)},
 			{lightoff,imgToBmp("lightoff.png",Multi,1)},
 			{light1,imgToBmp("light1.png",Multi,1)},
 			{light2,imgToBmp("light2.png",Multi,1)},
@@ -67,7 +67,15 @@ do_init(Config) ->
 			{h3,imgToBmp("heart3.png",Div,5)},
 			{h4,imgToBmp("heart4.png",Div,5)},
 			{h5,imgToBmp("heart5.png",Div,5)},
-			{h6,imgToBmp("heart6.png",Div,5)}]),
+			{h6,imgToBmp("heart6.png",Div,5)},
+
+			{tbr,imgToBmp("bartopRIGHT.png",Multi,1)},
+			{tbl,imgToBmp("bartopLEFT.png",Multi,1)},
+			{bbr,imgToBmp("barbotRIGHT.png",Multi,1)},
+			{bbl,imgToBmp("barbotLEFT.png",Multi,1)}
+
+			]),
+			
 		
 	
     Parent = proplists:get_value(parent, Config),  
@@ -209,7 +217,7 @@ print(State,Positions)->
 		  wxDC:clear(DC),
 		  lists:foreach(fun({{X,Y}=Pos,Pic}) ->
 					wxDC:drawBitmap(DC,read(pics,Pic),Pos)
-				end, [{{0,0},bg},{{350,150},read(param,light)}++Positions])%add two upper bars]++Positions++[%{{X,Y},name}%add two lower bars])
+				end, [{{0,0},bg},{{0,0},tbl},{{750,0},tbr},{{350,150},read(param,light)}]++Positions++[{{0,555},bbl},{{750,555},tbr}])%add two upper bars]++Positions++[%{{X,Y},name}%add two lower bars])
 	  end,
     draw(State#state.canvas, State#state.bitmap, Fun).
 
