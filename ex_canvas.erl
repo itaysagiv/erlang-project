@@ -60,8 +60,8 @@ do_init(Config) ->
 			{light1,imgToBmp("light1.png",Multi,1)},
 			{light2,imgToBmp("light2.png",Multi,1)},
 			{light3,imgToBmp("light3.png",Multi,1)},
-			{male,imgToBmp("male.png",Div,10)},
-			{female,imgToBmp("female.png",Div,10)},
+			{male,imgToBmp("male.png",Div,1)},
+			{female,imgToBmp("female.png",Div,1)},
 			{h1,imgToBmp("heart1.png",Div,5)},
 			{h2,imgToBmp("heart2.png",Div,5)},
 			{h3,imgToBmp("heart3.png",Div,5)},
@@ -217,7 +217,7 @@ print(State,Positions)->
 		  wxDC:clear(DC),
 		  lists:foreach(fun({{X,Y}=Pos,Pic}) ->
 					wxDC:drawBitmap(DC,read(pics,Pic),Pos)
-				end, [{{0,0},bg},{{0,0},tbl},{{750,0},tbr},{{350,150},read(param,light)}]++Positions++[{{0,555},bbl},{{750,555},tbr}])%add two upper bars]++Positions++[%{{X,Y},name}%add two lower bars])
+				end, [{{0,0},bg},{{0,0},tbl},{{604,0},tbr},{{350,100},read(param,light)}]++Positions++[{{0,345},bbl},{{604,345},bbr}])%add two upper bars]++Positions++[%{{X,Y},name}%add two lower bars])
 	  end,
     draw(State#state.canvas, State#state.bitmap, Fun).
 

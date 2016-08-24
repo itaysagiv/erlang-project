@@ -1,9 +1,9 @@
 -module(gs).
 -behaviour(gen_server).
 -compile(export_all).
--define(PCS,2).
--define(N,600).
--define(M,1000).
+-define(PCS,4).
+-define(N,424).
+-define(M,944).
 
 %-------------------------------------
 start_link()->

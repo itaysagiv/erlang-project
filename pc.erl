@@ -1,16 +1,19 @@
 -module(pc).
 -behaviour(gen_server).
 -compile(export_all).
+-include_lib("stdlib/include/qlc.hrl").
 -define(MAIN,'main@asaf-VirtualBox').
--define(N,600).
--define(M,1000).
+-define(N,424).
+-define(M,944).
+-define(W,57).
+-define(H,78).
 -define(PC1,'pc1@asaf-VirtualBox').
 -define(PC2,'pc2@asaf-VirtualBox').
 -define(PC3,'pc3@asaf-VirtualBox').
 -define(PC4,'pc4@asaf-VirtualBox').
 %    starting the gen server and init it
 %---------------------------------------------------------
-start_link(Num)->
+start_link([Num])->
 	gen_server:start_link({local,gs},pc,[Num],[]).	%start gs
 
 %init function, start the ets
@@ -38,22 +41,26 @@ status()->
 %---------------------------------------------------------
 
 %function that check what will be in the next more of process
-checkMove({X,_},{Xmin,_},{_,_})when X<Xmin->%left
+checkMove(_,{X,_},{Xmin,_},{_,_})when X<Xmin->%left
 	[{Check,Tmp}]=ets:lookup(borders,left),{left,Tmp};
-checkMove({X,_},{_,Xmax},{_,_})when X>Xmax->%right
+checkMove(_,{X,_},{_,Xmax},{_,_})when X>Xmax->%right
 	[{Check,Tmp}]=ets:lookup(borders,right),{right,Tmp};
-checkMove({_,Y},{_,_},{Ymin,_})when Y<Ymin->%up
+checkMove(_,{_,Y},{_,_},{Ymin,_})when Y<Ymin->%up
 	[{Check,Tmp}]=ets:lookup(borders,up),{up,Tmp};
-checkMove({_,Y},{_,_},{_,Ymax})when Y>Ymax->%down
+checkMove(_,{_,Y},{_,_},{_,Ymax})when Y>Ymax->%down
 	[{Check,Tmp}]=ets:lookup(borders,down),{down,Tmp};
-checkMove({X,Y},_,_)->case ets:lookup(location,{X,Y}) of
+checkMove({OldX,OldY},{X,Y},_,_)->case checkRaduis(OldX,OldY) of
 	[]->{ok,freespace};
-	_->{ok,person}
+	[H|_T]->io:format("old: ~p new: ~p~n",[{OldX,OldY},{X,Y}]),{H,person}
 end.
+
+ checkRaduis(X,Y)->
+	QH=qlc:q([{K,V}||{{Xnew,Ynew}=K,V}<-ets:table(location),Xnew<X+?W,Xnew>X-?W,Ynew<Y+?H,Ynew>?W,Xnew/=X,Ynew/=Y]),
+	qlc:eval(QH).
 
 %cross call, when process want to move to other pc. the pc check if he can, if so, he create him
 %in his pc location.
-handle_call({cross,{Xold,Yold},Dir,Gender,Rank},_,ready)->
+handle_call({cross,{Xold,Yold},Dir,Gender,Rank,Vec},_,ready)->
 	case Dir of 
 		up->X=Xold,Y=Yold-1;
 		down->X=Xold,Y=Yold+1;
@@ -61,23 +68,19 @@ handle_call({cross,{Xold,Yold},Dir,Gender,Rank},_,ready)->
 		left->X=Xold-1,Y=Yold
 	end,
 	case ets:lookup(location,{X,Y}) of
-		[]->Id = newProc({X,Y},Gender,Rank),
+		[]->Id = newProc({X,Y},Gender,Rank,Vec),
 		ets:insert(location,{{X,Y},{Id,Gender}}),
 		io:format("process moved to:{~p,~p}~n",[X,Y]),
 		{reply,ok,ready};
-		_->wait(50),case ets:lookup(location,{X,Y}) of
-			[]->Id = newProc({X,Y},Gender,Rank),
-			ets:insert(location,{{X,Y},{Id,Gender}}),
-			io:format("process moved to:{~p,~p}~n",[X,Y]),
-			{reply,ok,ready};
-			_->{reply,dont,ready} 
-		end
+		_->{reply,dont,ready} 
+		
 	end.
 
 %----kill-state----
 terminate(_,_)->
 	io:format("pc down~n"),	
 	ok.   						% terminate the pc
+
 handle_cast({kill},_)->
 	Location=ets:tab2list(location),		        	%save all locations ets in list
 	gen_server:cast({gs,?MAIN},{suicide,read(param,index),Location}),  	%send the ets with locations to main
@@ -95,18 +98,18 @@ handle_cast({readyack},set)->
 %from user
 handle_cast({new,Gender,{X,Y}},ready)->
 	%insert to ets + check close to other process (smell or contact)
-	Id = newProc({X,Y},Gender,-1),
+	Id = newProc({X,Y},Gender,-1,rand:uniform(8)),
 	ets:insert(location,{{X,Y},{Id,Gender}}),
 	io:format("new proc: ~p in {~p,~p}~n",[Gender,X,Y]),
 	{noreply,ready};
  	
-handle_cast({walkreq,Old,New,Id,Cv,Gender},ready)->
+handle_cast({walkreq,Old,New,Id,Cv,Gender,Vec},ready)->
 	io:format("received walkreq~n"),
-	case read(param,{Id,cv}) of
+	case read(param,{Id,cv}) of	%check if in cv ready or bo
 		busy-> Reply=noreply;
 		_->
 		[{bounds,{{Xmin,Xmax},{Ymin,Ymax}}}]=ets:lookup(param,bounds),
-		{Dir,CrossPC}=checkMove(New,{Xmin,Xmax},{Ymin,Ymax}),
+		{Dir,CrossPC}=checkMove(Old,New,{Xmin,Xmax},{Ymin,Ymax}),
 
 		io:format("~p:~p~n",[Dir,CrossPC]),
 
@@ -115,17 +118,18 @@ handle_cast({walkreq,Old,New,Id,Cv,Gender},ready)->
 			bar-> io:format("sent bar to the process~n"),
 				case Cv of
 					ready->{bar};
-					bo-> {wall}
+					bo-> {wall,Dir}
 				end;
 			wall->io:format("sent wall to the process~n"),
-				{wall};
+				{wall,Dir};
 			person->io:format("sent person to the process~n"),
-				{OtherId,OtherGender} = read(location,New),
+				{{OtherX,OtherY},{OtherId,OtherGender}}=Dir,
+				%{OtherId,OtherGender} = read(location,Dir),%dir is the neighbor X,Y
 				OtherCv = read(param,{OtherId,cv}),
 				case {Cv,OtherCv} of
-					{Cv,OtherCv} when Cv==bo;OtherCv/=ready->	gen_statem:cast(OtherId,{inter,Id,Gender}),
-											{inter,OtherId,OtherGender};
-					_-> {wall}
+					%{Cv,OtherCv} when Cv==bo;OtherCv/=ready->	gen_statem:cast(OtherId,{inter,Id,Gender}),
+					%						{inter,OtherId,OtherGender};
+					_-> {wall,person}
 				end;
 			freespace->io:format("sent freespace to the process~n"),
 				%update ets
@@ -134,9 +138,9 @@ handle_cast({walkreq,Old,New,Id,Cv,Gender},ready)->
 				ets:insert(location,{New,Data}),
 				noreply;
 			_->io:format("sent cross to the process~n"),
-				case gen_server:call({gs,CrossPC},{cross,Old,Dir,Gender,read(param,{Id,rank})}) of
+				case gen_server:call({gs,CrossPC},{cross,Old,Dir,Gender,read(param,{Id,rank}),Vec}) of
 					ok->ets:delete(location,Old),gen_statem:stop(Id),noreply;%if cross, kill the process
-					_->{wall}
+					_->{wall,Dir}
 				end	
 		end
 	end,
@@ -190,7 +194,7 @@ wait(X)->
 		after X-> ok
 	end.
 
-newProc({X,Y},Gender,Rank)->
+newProc({X,Y},Gender,Rank,Dir)->
 	Cnt = read(param,proc_id),
 	Pc = case read(param,index) of
 		pc1->?PC1;
@@ -198,7 +202,7 @@ newProc({X,Y},Gender,Rank)->
 		pc3->?PC3;
 		pc4->?PC4
 	end,
-	spawn(proc,start_link,[Cnt,{{X,Y},Gender,Rank},Pc]),
+	spawn(proc,start_link,[Cnt,{{X,Y},Gender,Rank,Dir},Pc]),
 	write(param,proc_id,Cnt+1),
 	toAtom(Cnt+1).
 
