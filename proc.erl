@@ -15,65 +15,119 @@ init([{{X,Y},Gender,Rank,Dir},Reg,Pc])->
 	-1 -> ets:insert(param,{{Reg,rank},rand:uniform(5)+2});
 	_->ets:insert(param,{{Reg,rank},Rank})
 	end,
+	ets:insert(ranks,{{X+8,Y-15},toAtom(read(param,{Reg,rank}))}),
 	ets:insert(param,{{Reg,cv},ready}),
 	
 	Data = #{cv=>ready,dir=>Dir,id=>Reg, pc=>Pc},
 	spawn_link(fun()->step(Reg) end),
+	spawn_link(fun()->changeDir(Reg) end),
 	{?CB_MODE,walk,Data}.
 
-handle_event(cast,{light,Time},walk,Data)->
-	io:format("got light~n"),
+handle_event(cast,{dance},walk,#{id := Id, cv := ready}=Data)->
+	io:format("process ~p received dance~n",[Id]),
+	gen_server:cast(gs,{dancing,Id,read(param,{Id,gender}),read(param,{Id,curr})}),
+	spawn_link(fun()->timer(5000,Id,{stop_dance}) end),
+	ets:insert(param,{{Id,cv},bo}),
 	{next_state,stop,Data#{cv := bo}};
 
-handle_event(cast,step,stop,Data)->
+handle_event(cast,{dance},_,Data)->
 	{keep_state,Data};
 
-
-%handle_event(cast,{inter,Id,Gender},walk,#{dir := Dir , id := Id}=Data)->
-
-	
-
-
-
-
-
-
-
-
-handle_event(cast,{wall,Impact},walk,#{dir := Dir , id := Id}=Data)->
-	{X,Y} = read(param,{Id,curr}),
-	{Xback,Yback}=case Dir of
-			1->NewDir=5,{-1,0};
-			2->case Impact of
-				person->NewDir=4;
-				up-> NewDir=8;
-				right->NewDir=4
-				end,{-1,1};
-			3->NewDir=7,{0,1};
-			4->case Impact of
-				person->NewDir=2;
-				up->NewDir=6;
-				left->NewDir=2
-				end,{1,1};	
-			5->NewDir=1,{1,0};
-			6->case Impact of
-				person->NewDir=8;
-				down->NewDir=4;
-				left->NewDir=8
-				end,{1,-1};	
-			7->NewDir=3,{0,-1};
-			8->case Impact of
-				person->NewDir=6;
-				down->NewDir=2;
-				right->NewDir=6
-				end,{-1,-1}
-			end,
-	io:format("change dir tp ~p~n",[NewDir]),
-	New = {X+?STEP_SIZE*Xback,Y+?STEP_SIZE*Yback},
-	write(param,{Id,curr},New),
+handle_event(cast,{chngDir,Turn},_,#{dir := Dir}=Data)->
+	NewDir = case Dir+Turn of
+		9->1;
+		0->8;
+		X->X
+	end,
 	{keep_state,Data#{dir := NewDir}};
 
+handle_event(cast,{stop_dance},stop,#{id := Id}=Data)->
+	spawn_link(fun()->timer(3000,Id,{stop_bo}) end),
+	{next_state,walk,Data};
 
+handle_event(cast,{bar},walk,#{id := Id, dir := Dir}=Data)->
+	Impact = case Dir of
+		X when X>=1,X<5 -> up;
+		_-> down
+		end,
+	NewDir = stepBack(Id,Dir,Impact),
+	gen_server:cast(gs,{drinking,Id,read(param,{Id,gender}),read(param,{Id,curr})}),
+	spawn_link(fun()->timer(3000,Id,{stop_drink}) end),
+	MyRank=read(param,{Id,rank}),
+	case read(param,{Id,gender}) of
+		male-> ets:insert(param,{{Id,rank},MyRank+1});
+		female when MyRank/=1-> ets:insert(param,{{Id,rank},MyRank-1});
+		_-> ok
+	end,
+	spawn_link(fun()-> checkRank(Id) end),
+	ets:insert(param,{{Id,cv},bo}),
+	{next_state,stop,Data#{cv := bo}};
+
+handle_event(cast,{stop_drink},stop,#{id := Id}=Data)->
+	spawn_link(fun()->timer(3000,Id,{stop_bo}) end),
+	{next_state,walk,Data};
+
+handle_event(cast,{stop_bo},_,#{id := Id}=Data)->
+	ets:insert(param,{{Id,cv},ready}),
+	{next_state,walk,Data#{cv := ready}};
+
+handle_event(cast,{inter_wait,OtherId,OtherGender},walk,#{dir := Dir , id := Id}=Data)->
+	NewDir=stepBack(Id,Dir,person),
+	ets:insert(param,{{Id,cv},bo}),
+	{next_state,stop,Data#{ dir :=  NewDir, cv := bo}};
+
+handle_event(cast,{end_inter},stop,#{id := Id}=Data)->
+	spawn_link(fun()->timer(5000,Id,{stop_bo}) end),
+	{next_state,walk,Data};
+
+handle_event(cast,{inter_begin,OtherId,OtherGender},walk,#{ id := Id , dir := Dir}=Data)->
+	NewDir=stepBack(Id,Dir,person),
+	case Res=gen_statem:call(OtherId,{my_rank,read(param,{Id,rank}),read(param,{Id,gender})}) of
+		win -> write(param,{Id,rank},read(param,{Id,rank})+1);
+		lose->	write(param,{Id,rank},read(param,{Id,rank})-1);
+		{love,Curr}-> ok;
+		_-> ok
+	end,
+	spawn_link(fun()->checkRank(Id) end),
+	spawn_link(fun()->timer(3000,Id,{stop_inter,OtherId,Res}) end),
+	ets:insert(param,{{Id,cv},bo}),
+	{next_state,stop,Data#{ dir := NewDir, cv := bo}};
+
+handle_event({call,From},{my_rank,OtherRank,OtherGender},stop,#{ id := Id}=Data)->
+	MyRank = read(param,{Id,rank}),
+	{Me,Other}=case {read(param,{Id,gender}),OtherGender} of
+			{X,X} when MyRank>OtherRank -> {win,lose};
+			{X,X} when MyRank<OtherRank -> {lose,win};
+			{X,X} -> {tie,tie};
+			{male,female} when MyRank<OtherRank -> {lose,win};
+			{female,male} when MyRank>OtherRank -> {win,lose};
+			_-> {love,{love,read(param,{Id,curr})}}
+			end,
+	case Me of
+		win-> write(param,{Id,rank},MyRank+1);
+		lose-> write(param,{Id,rank},MyRank-1);
+		_-> ok
+	end,
+	spawn_link(fun()->checkRank(Id) end),
+	{keep_state,Data,[{reply,From,Other}]}; 
+
+handle_event(cast,{stop_inter,OtherId,Res},stop,#{ id := Id}=Data)->
+	case Res of
+		{love,Curr}->gen_server:cast(gs,{love,Id,OtherId,Curr,read(param,{Id,curr})});
+		_->ok
+	end,
+	gen_statem:cast(OtherId,{end_inter}),
+	spawn_link(fun()->timer(5000,Id,{stop_bo}) end),
+	{next_state,walk,Data};
+	
+
+handle_event(cast,{wall,Impact},_,#{dir := Dir , id := Id}=Data)->
+	NewDir=stepBack(Id,Dir,Impact),
+	io:format("change dir to ~p~n",[NewDir]),
+	{keep_state,Data#{dir := NewDir}};
+
+handle_event({call,From},step,stop,Data)->
+	{keep_state,Data,[{reply,From,ignore}]};
 
 handle_event({call,From},step,walk,#{dir := Dir, pc := Pc , id := Id , cv := Cv}=Data)->
 	{X,Y} = read(param,{Id,curr}),
@@ -105,11 +159,11 @@ step(Id)->
 	gen_statem:call(Id,step),
 	step(Id).
 
-timer(X,#{id := Id})->
+timer(X,Id,RetMsg)->
 	receive
 		after X -> ok
 	end,
-	gen_statem:cast(Id,{to}).
+	gen_statem:cast(Id,RetMsg).
 
 toAtom(Term)->
 	list_to_atom(lists:flatten(io_lib:format("~p", [Term]))).
@@ -119,7 +173,12 @@ wait(X)->
 		after X-> ok
 	end.
 
-
+checkRank(Id)->
+	case read(param,{Id,rank}) of
+		0-> gen_server:cast(gs,{dead,Id,read(param,{Id,curr})});
+		10-> write(param,{Id,rank},9);
+		_-> ok
+	end.
 
 read(Tab,Key)->
 	[{Key,Val}]=ets:lookup(Tab,Key),
@@ -127,3 +186,40 @@ read(Tab,Key)->
 
 write(Tab,Key,Val)->
 	ets:insert(Tab,{Key,Val}).
+
+changeDir(Id)->
+	wait((rand:uniform(3)+2)*1000),
+	gen_statem:cast(Id,{chngDir,rand:uniform(3)-2}),
+	changeDir(Id).
+
+stepBack(Id,Dir,Impact)->
+	{X,Y} = read(param,{Id,curr}),
+	{Xback,Yback}=case Dir of
+		1->NewDir=5,{-1,0};
+		2->case Impact of
+			person->NewDir=4;
+			up-> NewDir=8;
+			right->NewDir=4
+			end,{-1,1};
+		3->NewDir=7,{0,1};
+		4->case Impact of
+			person->NewDir=2;
+			up->NewDir=6;
+			left->NewDir=2
+			end,{1,1};	
+		5->NewDir=1,{1,0};
+		6->case Impact of
+			person->NewDir=8;
+			down->NewDir=4;
+			left->NewDir=8
+			end,{1,-1};	
+		7->NewDir=3,{0,-1};
+		8->case Impact of
+			person->NewDir=6;
+			down->NewDir=2;
+			right->NewDir=6
+			end,{-1,-1}
+		end,
+		New = {X+?STEP_SIZE*Xback,Y+?STEP_SIZE*Yback},
+		write(param,{Id,curr},New),
+		NewDir.

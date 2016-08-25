@@ -17,10 +17,35 @@ init(_)->
 	ets:insert(param,{light,lightoff}),			
 	ets:new(location,[set,named_table,public]),		%set ets to save locations
 	ets:insert(location,[{pc1,[]},{pc2,[]},{pc3,[]},{pc4,[]}]),
+	ets:new(ranks,[set,named_table,public]),
+	ets:insert(ranks,[{pc1,[]},{pc2,[]},{pc3,[]},{pc4,[]}]),
 	ets:insert(param,{connect_cnt,0}),
-	spawn_link(fun()->wait(50000),gen_server:cast(gs,{timeout}) end), %set timer to 5 sec - if not all 4 pcs connect - shut down
+	spawn_link(fun()->wait(50000),gen_server:cast(gs,{timeout}) end), %set timer to 50 sec - if not all 4 pcs connect - shut down
+	spawn(fun()->wait(5000),keepAlive() end),
 	{ok,set}.
 %------------------------------------
+
+keepAlive()->
+	keepAlive([{Key,X}|| {Key,{_,X}}<-ets:tab2list(pc)]),
+	keepAlive().
+
+keepAlive([])->ok;
+keepAlive([{Key,Pc}|T])->
+	wait(1000),
+ 	try gen_server:call({gs,Pc},{keepalive}) of
+		OK->ok
+	catch	
+		exit:Exit->io:format("exit: ~p is down ~n",[Key]),
+		DarkLoc = case Key of
+			pc1-> {175,35}; pc2-> {675,35}; pc3-> {175,285}; pc4-> {675,285}
+			end,
+		ets:insert(location,{Key,[{DarkLoc,{'-1',dark}}]}),
+		ets:insert(ranks,{Key,[]}),
+		ets:delete(pc,Key)
+	end,keepAlive(T).
+	
+
+
 
 %sends acks to all pc that connected so they start send status
 sendacks(0)->	io:format("all acks sent~n"),spawn_link(fun()->loop() end);
@@ -58,10 +83,11 @@ handle_cast({timeout},State)->
 	{noreply,State};
 handle_cast({kill},_)->
 	{stop,normal,done};
-handle_cast({status,Index,Grid},ready)->
+handle_cast({status,Index,Locations,Ranks},ready)->
 	%reset(Index),
 	%[case Gender of male-> change(X,Y,$X); female-> change(X,Y,$O) end||{{X,Y},{_,Gender}}<-Grid],
-	ets:insert(location,{Index,Grid}),
+	ets:insert(location,{Index,Locations}),
+	ets:insert(ranks,{Index,Ranks}),
 	{noreply,ready}.
 
 terminate(_,_)->
@@ -71,9 +97,11 @@ terminate(_,_)->
 %------------------------------------------------------
 %-------------------UI --------------------------------
 %------------------------------------------------------
-create()-> X=rand:uniform(?M),Y=rand:uniform(?N),case rand:uniform(2) of
+create(0)->ok;
+create(N)-> X=rand:uniform(?M),Y=rand:uniform(?N),case rand:uniform(2) of
 1->G=male;
-_->G=female end, create(G,X,Y).
+_->G=female end, create(G,X,Y),
+create(N-1).
 
 create(Gender,X,Y) when X<?M/2 , Y<?N/2->	[{pc1,From}]=ets:lookup(pc,pc1), gen_server:cast(From,{new,Gender,{X,Y}});	
 create(Gender,X,Y) when X>=?M/2 , Y<?N/2->	[{pc2,From}]=ets:lookup(pc,pc2), gen_server:cast(From,{new,Gender,{X,Y}});
@@ -161,8 +189,9 @@ loop()->
 	loop().
 
 %--function for light in the dance floor--
-light(Time)->
-	light([light1,light2,light3|[]],0,Time*2).
+light()->
+	[gen_server:cast({gs,Pc},{light})||{_,{_,Pc}}<-ets:tab2list(pc)],
+	light([light1,light2,light3|[]],0,10).
 light(_,N,N)->
 	ets:insert(param,{light,lightoff});
 light([H|T],N,Stop)->

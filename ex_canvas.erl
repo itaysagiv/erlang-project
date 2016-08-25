@@ -62,6 +62,19 @@ do_init(Config) ->
 			{light3,imgToBmp("light3.png",Multi,1)},
 			{male,imgToBmp("male.png",Div,1)},
 			{female,imgToBmp("female.png",Div,1)},
+			{drink1female,imgToBmp("drink1female.png",Div,1)},
+			{drink2female,imgToBmp("drink2female.png",Div,1)},
+			{drink1male,imgToBmp("drink1male.png",Div,1)},
+			{drink2male,imgToBmp("drink2male.png",Div,1)},
+			{d1male,imgToBmp("dance1male.png",Div,1)},
+			{d2male,imgToBmp("dance2male.png",Div,1)},
+			{d3male,imgToBmp("dance3male.png",Div,1)},
+			{d4male,imgToBmp("dance4male.png",Div,1)},
+			{d1female,imgToBmp("dance1female.png",Div,1)},
+			{d2female,imgToBmp("dance2female.png",Div,1)},
+			{d3female,imgToBmp("dance3female.png",Div,1)},
+			{d4female,imgToBmp("dance4female.png",Div,1)},
+			{dark,imgToBmp("dark.png",Div,2)},
 			{h1,imgToBmp("heart1.png",Div,5)},
 			{h2,imgToBmp("heart2.png",Div,5)},
 			{h3,imgToBmp("heart3.png",Div,5)},
@@ -72,7 +85,17 @@ do_init(Config) ->
 			{tbr,imgToBmp("bartopRIGHT.png",Multi,1)},
 			{tbl,imgToBmp("bartopLEFT.png",Multi,1)},
 			{bbr,imgToBmp("barbotRIGHT.png",Multi,1)},
-			{bbl,imgToBmp("barbotLEFT.png",Multi,1)}
+			{bbl,imgToBmp("barbotLEFT.png",Multi,1)},
+
+			{'1',imgToBmp("1.png",Div,10)},
+			{'2',imgToBmp("2.png",Div,10)},
+			{'3',imgToBmp("3.png",Div,10)},
+			{'4',imgToBmp("4.png",Div,10)},
+			{'5',imgToBmp("5.png",Div,10)},
+			{'6',imgToBmp("6.png",Div,10)},
+			{'7',imgToBmp("7.png",Div,10)},
+			{'8',imgToBmp("8.png",Div,10)},
+			{'9',imgToBmp("9.png",Div,10)}
 
 			]),
 			
@@ -133,7 +156,8 @@ handle_sync_event(#wx{event = #wxPaint{}}, _wxObj,
 handle_event(#wx{event = #wxCommand{type = command_button_clicked}},
 	     State = #state{}) ->
 	Pos=lists:flatten([[{{X,Y},Gender}||{{X,Y},{_Pid,Gender}}<-read(location,Pc)]||Pc<-[pc1|[pc2,pc3,pc4]]]),
-	print(State,Pos),
+	Ranks =lists:flatten([read(ranks,Pc)||Pc<-[pc1|[pc2,pc3,pc4]]]),
+	print(State,Pos,Ranks),
     {noreply, State};
 handle_event(#wx{event = #wxSize{size={W,H}}},
 	     State = #state{bitmap=Prev, canvas=Canvas}) ->
@@ -208,7 +232,7 @@ redraw(DC, Bitmap) ->
 get_pos(W,H) ->
     {random:uniform(W), random:uniform(H)}.
 
-print(State,Positions)->
+print(State,Positions,Ranks)->
 
 
     {W,H} = wxPanel:getSize(State#state.canvas),
@@ -217,7 +241,7 @@ print(State,Positions)->
 		  wxDC:clear(DC),
 		  lists:foreach(fun({{X,Y}=Pos,Pic}) ->
 					wxDC:drawBitmap(DC,read(pics,Pic),Pos)
-				end, [{{0,0},bg},{{0,0},tbl},{{604,0},tbr},{{350,100},read(param,light)}]++Positions++[{{0,345},bbl},{{604,345},bbr}])%add two upper bars]++Positions++[%{{X,Y},name}%add two lower bars])
+				end,[{{0,0},bg},{{0,0},tbl},{{604,0},tbr},{{350,100},read(param,light)}]++sortByY(Positions)++sortByY(Ranks)++[{{0,345},bbl},{{604,345},bbr}])
 	  end,
     draw(State#state.canvas, State#state.bitmap, Fun).
 
@@ -233,3 +257,7 @@ imgToBmp(String,Fun,Factor)->
 read(Tab,Key)->
 	[{Key,Val}]=ets:lookup(Tab,Key),
 	Val.
+
+sortByY([])->[];
+sortByY(List)->
+	[{{X2,Y2},Data2}||{{Y2,X2},Data2}<-lists:sort([{{Y1,X1},Data1}||{{X1,Y1},Data1}<-List])].
