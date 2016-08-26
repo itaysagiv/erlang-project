@@ -5,50 +5,60 @@
 -define(N,424).
 -define(M,944).
 
+%   _____               _____                          
+%  / ____|             / ____|                         
+% | |  __  ___ _ __   | (___   ___ _ ____   _____ _ __ 
+% | | |_ |/ _ \ '_ \   \___ \ / _ \ '__\ \ / / _ \ '__|
+% | |__| |  __/ | | |  ____) |  __/ |   \ V /  __/ |   
+%  \_____|\___|_| |_| |_____/ \___|_|    \_/ \___|_|   
+%                                                     
+%         By: Itay Sagiv & Asaf Azzura
 %-------------------------------------
-start_link()->
+start_link()->								%func to start the gen server
 	gen_server:start_link({local,gs},gs,[],[]).
 
 init(_)->
-	%start_board(?N,?M),
-	spawn_link(demo,start,[]),				%set up the graphics
-	ets:new(pc,[set,named_table,public]),			%set ets to save pcs
-	ets:new(param,[set,named_table,public]),		%set ets to save the paramters
-	ets:insert(param,{light,lightoff}),			
-	ets:new(location,[set,named_table,public]),		%set ets to save locations
-	ets:insert(location,[{pc1,[]},{pc2,[]},{pc3,[]},{pc4,[]}]),
-	ets:new(ranks,[set,named_table,public]),
-	ets:insert(ranks,[{pc1,[]},{pc2,[]},{pc3,[]},{pc4,[]}]),
-	ets:insert(param,{connect_cnt,0}),
+	spawn_link(demo,start,[]),					%set up the graphics
+	ets:new(pc,[set,named_table,public]),				%set ets to save pcs
+	ets:new(param,[set,named_table,public]),			%set ets to save the paramters
+	ets:insert(param,{light,lightoff}),				%insert light status
+	ets:new(location,[set,named_table,public]),			%set ets to save locations
+	ets:insert(location,[{pc1,[]},{pc2,[]},{pc3,[]},{pc4,[]}]),	%insert the pcs location (start with empty value)
+	ets:new(ranks,[set,named_table,public]),			%start ets to save ranks
+	ets:insert(ranks,[{pc1,[]},{pc2,[]},{pc3,[]},{pc4,[]}]),  	%insert the pcs ranks (start with empty value)
+	ets:insert(param,{connect_cnt,0}),				%insert status of how much pc connected
+	ets:new(walk_pics,[set,named_table,public]),
+	ets:insert(walk_pics,[{pc1,[]},{pc2,[]},{pc3,[]},{pc4,[]}]),
 	spawn_link(fun()->wait(50000),gen_server:cast(gs,{timeout}) end), %set timer to 50 sec - if not all 4 pcs connect - shut down
 	spawn(fun()->wait(5000),keepAlive() end),
 	{ok,set}.
 %------------------------------------
 
+%keep alive func it to check if all the 4 pc are still connceted to the gen server, if not, the server 
+% know how to treat it and make sure that atleast the other pcs will work
 keepAlive()->
-	keepAlive([{Key,X}|| {Key,{_,X}}<-ets:tab2list(pc)]),
+	keepAlive([{Key,X}|| {Key,{_,X}}<-ets:tab2list(pc)]),%lc to get & save the pc full name
 	keepAlive().
 
-keepAlive([])->ok;
-keepAlive([{Key,Pc}|T])->
+keepAlive([])->ok;					%empty, go check other round now
+keepAlive([{Key,Pc}|T])->				%run over list of all pc and check if alive
 	wait(1000),
  	try gen_server:call({gs,Pc},{keepalive}) of
-		OK->ok
-	catch	
-		exit:Exit->io:format("exit: ~p is down ~n",[Key]),
+		_OK->ok					%alive
+	catch						%got error, pc down. switch is screen with a sign
+		exit:_Exit->io:format("exit: ~p is down ~n",[Key]),
 		DarkLoc = case Key of
 			pc1-> {175,35}; pc2-> {675,35}; pc3-> {175,285}; pc4-> {675,285}
 			end,
 		ets:insert(location,{Key,[{DarkLoc,{'-1',dark}}]}),
 		ets:insert(ranks,{Key,[]}),
+		ets:insert(walk_pics,{Key,[]}),
 		ets:delete(pc,Key)
 	end,keepAlive(T).
 	
 
-
-
 %sends acks to all pc that connected so they start send status
-sendacks(0)->	io:format("all acks sent~n"),spawn_link(fun()->loop() end);
+sendacks(0)->	io:format("all acks sent~n"),spawn_link(fun()->loop() end); % all pc connected, create loop to get updates from pc
 sendacks(N)->
 	case N of	%for each pc
 		1->	[{pc1,Dest}]=ets:lookup(pc,pc1), gen_server:cast(Dest,{readyack});
@@ -75,6 +85,21 @@ handle_cast({ready,I,Node},set)->
 		true->	sendacks(?PCS),{noreply,ready} %all pcs are connected
 	end;
 
+handle_cast({next_pic,Old,New,NewDir},ready)->
+	{Num,Gender,OldDir}=read(walk_pics,Old),
+	ets:delete(walk_pics,Old),
+	NewNum=((Num+1)rem 4),
+	ets:insert(walk_pics,{New,{NewNum,Gender,NewDir}}),
+	{noreply,ready};
+
+handle_cast({new_walk,Loc,Gender,Dir},ready)->
+	ets:insert(walk_pics,{Loc,{0,Gender,Dir}}),
+	{noreply,ready};
+
+handle_cast({kill_walk,Loc},ready)->
+	ets:delete(walk_pics,Loc),
+	{noreply,ready};
+
 %handles the time out in the setting
 handle_cast({timeout},set)->
 	gen_server:cast(gs,{kill}),
@@ -83,91 +108,16 @@ handle_cast({timeout},State)->
 	{noreply,State};
 handle_cast({kill},_)->
 	{stop,normal,done};
-handle_cast({status,Index,Locations,Ranks},ready)->
-	%reset(Index),
-	%[case Gender of male-> change(X,Y,$X); female-> change(X,Y,$O) end||{{X,Y},{_,Gender}}<-Grid],
+handle_cast({status,Index,Locations,Ranks,Walks},ready)->
 	ets:insert(location,{Index,Locations}),
 	ets:insert(ranks,{Index,Ranks}),
+	ets:insert(walk_pics,{Index,Walks}),
 	{noreply,ready}.
 
+%temrinate for gen server
 terminate(_,_)->
 	io:format("server down~n"),
 	ok.	
-
-%------------------------------------------------------
-%-------------------UI --------------------------------
-%------------------------------------------------------
-create(0)->ok;
-create(N)-> X=rand:uniform(?M),Y=rand:uniform(?N),case rand:uniform(2) of
-1->G=male;
-_->G=female end, create(G,X,Y),
-create(N-1).
-
-create(Gender,X,Y) when X<?M/2 , Y<?N/2->	[{pc1,From}]=ets:lookup(pc,pc1), gen_server:cast(From,{new,Gender,{X,Y}});	
-create(Gender,X,Y) when X>=?M/2 , Y<?N/2->	[{pc2,From}]=ets:lookup(pc,pc2), gen_server:cast(From,{new,Gender,{X,Y}});
-create(Gender,X,Y) when X<?M/2 , Y>=?N/2->	[{pc3,From}]=ets:lookup(pc,pc3), gen_server:cast(From,{new,Gender,{X,Y}});
-create(Gender,X,Y) when X>=?M/2 , Y>=?N/2->	[{pc4,From}]=ets:lookup(pc,pc4), gen_server:cast(From,{new,Gender,{X,Y}}).
-
-%------------------------------------------------------
-%-------------GRAPHICS --------------------------------
-%------------------------------------------------------
-
-print_board(L=[H|_T])->
-	io:format("\e[H\e[J"),
-	border(length(H)+2),
-	inside(L,length(L),length(L)),
-	border(length(H)+2).
-
-inside([],0,_)->ok;
-inside([H|T],M,S) when M>S/4 , M<(3*S/4)+1-> io:format("*~s*~n",[H]),inside(T,M-1,S);
-inside([H|T],M,S) -> io:format("#~s#~n",[H]),inside(T,M-1,S).
-
-border(N)->border(N,N).
-border(0,_)->io:format("~n");
-border(N,S) when N>(S/4)+1 , N<3*S/4 ->io:format("*"),border(N-1,S);
-border(N,S)->io:format("#"),border(N-1,S).
-
-init_board(N,M)->
-	init_board(N,M,[],[],M).
-init_board(0,0,Board,Line,_)->
-	Board++[Line];
-init_board(N,0,Board,Line,Save)->
-	init_board(N-1,Save,Board++[Line],[],Save);
-init_board(N,M,Board,Line,Save)->
-	init_board(N,M-1,Board,Line++" ",Save).
-
-start_board(N,M)->
-	ets:new(db,[set,named_table]),
-	ets:insert(db,{board,init_board(N,M)}),
-	spawn(fun()->loop() end).
-	
-change(X,Y,C)->
-	[{board,B}]=ets:lookup(db,board),
-	New = change(B,X,Y,C,[],[]),
-	ets:insert(db,{board,New}).
-
-change([],_,_,_,New,_)-> New; %return
-change([H|T],0,0,C,New,Line)->	%copy rest of lines
-	change(T,0,0,C,New++[H],Line);
-change([[]|T],0,1,C,New,Line)-> %insert line to new and go up
-	change(T,0,0,C,New++[Line],Line);
-change([[H|T1]|T],0,1,C,New,Line)-> %copy letters until end of line
-	change([T1|T],0,1,C,New,Line++[H]);
-change([[_|T1]|T],1,1,C,New,Line)-> %changing letter
-	change([T1|T],0,1,C,New,Line++[C]);
-change([[H|T1]|T],X,1,C,New,Line)-> %copy letters until x=1
-	change([T1|T],X-1,1,C,New,Line++[H]);
-change([H|T],X,Y,C,New,Line)-> %copy lines until y=1
-	change(T,X,Y-1,C,New++[H],Line).
-
-reset(Index)->
-	[change(X,Y,$ )||{{X,Y},{_,Gender}}<-read(location,Index)].
-	
-
-wait(X)->%function that make wait for X time
-	receive
-		after X-> ok
-	end.
 
 kill()->gen_server:stop(gs).%killing the gs with gen server stop
 
@@ -181,6 +131,7 @@ write(Tab,Key,Val)->
 	ets:insert(Tab,{Key,Val}).
 %-------------------------------------
 
+%loop for update the canvas every 0.1 sec
 loop()->
 	receive
 		after 100-> ok
@@ -190,8 +141,8 @@ loop()->
 
 %--function for light in the dance floor--
 light()->
-	[gen_server:cast({gs,Pc},{light})||{_,{_,Pc}}<-ets:tab2list(pc)],
-	light([light1,light2,light3|[]],0,10).
+	[gen_server:cast({gs,Pc},{light})||{_,{_,Pc}}<-ets:tab2list(pc)],%send pc that light start
+	light([light1,light2,light3|[]],0,10). % run the light pics
 light(_,N,N)->
 	ets:insert(param,{light,lightoff});
 light([H|T],N,Stop)->
@@ -199,3 +150,31 @@ light([H|T],N,Stop)->
 	wait(500),
 %------------------------------------------
 	light(T++[H],N+1,Stop).
+
+wait(X)->%function that make wait for X time
+	receive
+		after X-> ok
+	end.
+%  _    _                 _____       _____       _   
+% | |  | |               |_   _|     |  __ \     | |  
+% | |  | |___  ___ _ __    | |  _ __ | |__) |   _| |_ 
+% | |  | / __|/ _ \ '__|   | | | '_ \|  ___/ | | | __|
+% | |__| \__ \  __/ |     _| |_| | | | |   | |_| | |_ 
+%  \____/|___/\___|_|    |_____|_| |_|_|    \__,_|\__|                                                    
+%------------------------------------------------------
+%     The next funcation are for the user
+%	With them he can create processes
+
+%get number of process the user want, and create them randomly
+create(0)->ok;
+create(N)-> X=rand:uniform(?M),Y=rand:uniform(?N),case rand:uniform(2) of
+1->G=male;
+_->G=female end, create(G,X,Y),
+create(N-1).
+
+create(Gender,X,Y) when X<?M/2 , Y<?N/2->	[{pc1,From}]=ets:lookup(pc,pc1), gen_server:cast(From,{new,Gender,{X,Y}});%create in pc1	
+create(Gender,X,Y) when X>=?M/2 , Y<?N/2->	[{pc2,From}]=ets:lookup(pc,pc2), gen_server:cast(From,{new,Gender,{X,Y}});%create in pc2
+create(Gender,X,Y) when X<?M/2 , Y>=?N/2->	[{pc3,From}]=ets:lookup(pc,pc3), gen_server:cast(From,{new,Gender,{X,Y}});%create in pc3
+create(Gender,X,Y) when X>=?M/2 , Y>=?N/2->	[{pc4,From}]=ets:lookup(pc,pc4), gen_server:cast(From,{new,Gender,{X,Y}}).%create in pc4
+
+

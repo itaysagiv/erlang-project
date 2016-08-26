@@ -60,8 +60,6 @@ do_init(Config) ->
 			{light1,imgToBmp("light1.png",Multi,1)},
 			{light2,imgToBmp("light2.png",Multi,1)},
 			{light3,imgToBmp("light3.png",Multi,1)},
-			{male,imgToBmp("male.png",Div,1)},
-			{female,imgToBmp("female.png",Div,1)},
 			{drink1female,imgToBmp("drink1female.png",Div,1)},
 			{drink2female,imgToBmp("drink2female.png",Div,1)},
 			{drink1male,imgToBmp("drink1male.png",Div,1)},
@@ -87,6 +85,12 @@ do_init(Config) ->
 			{bbr,imgToBmp("barbotRIGHT.png",Multi,1)},
 			{bbl,imgToBmp("barbotLEFT.png",Multi,1)},
 
+			{pow1,imgToBmp("pow1.png",Div,3)},
+			{pow2,imgToBmp("pow2.png",Div,3)},
+			{pow3,imgToBmp("pow3.png",Div,3)},
+			{pow4,imgToBmp("pow4.png",Div,3)},
+			{pow5,imgToBmp("pow5.png",Div,3)},
+
 			{'1',imgToBmp("1.png",Div,10)},
 			{'2',imgToBmp("2.png",Div,10)},
 			{'3',imgToBmp("3.png",Div,10)},
@@ -95,8 +99,28 @@ do_init(Config) ->
 			{'6',imgToBmp("6.png",Div,10)},
 			{'7',imgToBmp("7.png",Div,10)},
 			{'8',imgToBmp("8.png",Div,10)},
-			{'9',imgToBmp("9.png",Div,10)}
+			{'9',imgToBmp("9.png",Div,10)},
 
+			{female1r,imgToBmp("walk1femaleRIGHT.png",Div,1)},
+			{female1l,imgToBmp("walk1femaleLEFT.png",Div,1)},
+			{female2r,imgToBmp("walk2femaleRIGHT.png",Div,1)},
+			{female2l,imgToBmp("walk2femaleLEFT.png",Div,1)},
+			{female3r,imgToBmp("walk3femaleRIGHT.png",Div,1)},
+			{female3l,imgToBmp("walk3femaleLEFT.png",Div,1)},
+			{female4r,imgToBmp("walk4femaleRIGHT.png",Div,1)},
+			{female4l,imgToBmp("walk4femaleLEFT.png",Div,1)},
+
+			{male1r,imgToBmp("walk1maleRIGHT.png",Div,1)},
+			{male1l,imgToBmp("walk1maleLEFT.png",Div,1)},
+			{male2r,imgToBmp("walk2maleRIGHT.png",Div,1)},
+			{male2l,imgToBmp("walk2maleLEFT.png",Div,1)},
+			{male3r,imgToBmp("walk3maleRIGHT.png",Div,1)},
+			{male3l,imgToBmp("walk3maleLEFT.png",Div,1)},
+			{male4r,imgToBmp("walk4maleRIGHT.png",Div,1)},
+			{male4l,imgToBmp("walk4maleLEFT.png",Div,1)},
+
+			{standMale,imgToBmp("male.png",Div,1)},
+			{standFemale,imgToBmp("female.png",Div,1)}
 			]),
 			
 		
@@ -155,8 +179,9 @@ handle_sync_event(#wx{event = #wxPaint{}}, _wxObj,
 %% Async Events are handled in handle_event as in handle_info
 handle_event(#wx{event = #wxCommand{type = command_button_clicked}},
 	     State = #state{}) ->
-	Pos=lists:flatten([[{{X,Y},Gender}||{{X,Y},{_Pid,Gender}}<-read(location,Pc)]||Pc<-[pc1|[pc2,pc3,pc4]]]),
+	Pos=lists:flatten([[entry(X,Y,Gender,Pc)||{{X,Y},{Id,Gender}}<-read(location,Pc)]||Pc<-[pc1|[pc2,pc3,pc4]]]),
 	Ranks =lists:flatten([read(ranks,Pc)||Pc<-[pc1|[pc2,pc3,pc4]]]),
+	%io:format("~p~n",[ets:tab2list(walk_pics)]),
 	print(State,Pos,Ranks),
     {noreply, State};
 handle_event(#wx{event = #wxSize{size={W,H}}},
@@ -210,6 +235,36 @@ terminate(_Reason, #state{overlay=Overlay}) ->
 %% Local functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+entry(X,Y,Gender,Pc) when Gender==male ; Gender==female->
+	L=read(walk_pics,Pc),
+	[{Num,Gen,Dir}] = [V||{K,V}<-L,K=={X,Y}],
+	case Gender of
+		male->
+			case {Num,Dir} of	
+				{0,_} when Dir==8;Dir==1;Dir==2;Dir==3 	-> {{X,Y},male1r};
+				{0,_}				-> {{X,Y},male1l};
+				{1,_} when Dir==8;Dir==1;Dir==2;Dir==3 	-> {{X,Y},male2r};
+				{1,_}				-> {{X,Y},male2l};
+				{2,_} when Dir==8;Dir==1;Dir==2;Dir==3 	-> {{X,Y},male3r};
+				{2,_}				-> {{X,Y},male3l};
+				{3,_} when Dir==8;Dir==1;Dir==2;Dir==3 	-> {{X,Y},male4r};
+				{3,_}				-> {{X,Y},male4l}
+			end;
+		female-> 	
+			case {Num,Dir} of	
+				{0,_} when Dir==8;Dir==1;Dir==2;Dir==3 	-> {{X,Y},female1r};
+				{0,_}				-> {{X,Y},female1l};
+				{1,_} when Dir==8;Dir==1;Dir==2;Dir==3 	-> {{X,Y},female2r};
+				{1,_}				-> {{X,Y},female2l};
+				{2,_} when Dir==8;Dir==1;Dir==2;Dir==3 	-> {{X,Y},female3r};
+				{2,_}				-> {{X,Y},female3l};
+				{3,_} when Dir==8;Dir==1;Dir==2;Dir==3 	-> {{X,Y},female4r};
+				{3,_}				-> {{X,Y},female4l}
+			end
+	end;
+entry(X,Y,Gender,_)->
+	{{X,Y},Gender}.
+
 %% Buffered makes it all appear on the screen at the same time
 draw(Canvas, Bitmap, Fun) ->
     MemoryDC = wxMemoryDC:new(Bitmap),
@@ -255,7 +310,7 @@ imgToBmp(String,Fun,Factor)->
     Bmp.	
 
 read(Tab,Key)->
-	[{Key,Val}]=ets:lookup(Tab,Key),
+	[{Key,Val}|_T]=ets:lookup(Tab,Key),
 	Val.
 
 sortByY([])->[];

@@ -11,8 +11,17 @@
 -define(PC2,'pc2@asaf-VirtualBox').
 -define(PC3,'pc3@asaf-VirtualBox').
 -define(PC4,'pc4@asaf-VirtualBox').
-%    starting the gen server and init it
+
+%  ________                ___________________  
+% /  _____/  ____   ____   \______   \_   ___ \ 
+%/   \  ____/ __ \ /    \   |     ___/    \  \/ 
+%\    \_\  \  ___/|   |  \  |    |   \     \____
+% \______  /\___  >___|  /  |____|    \______  /
+%        \/     \/     \/                    \/ 
+%
+%	By: Itay Sagiv & Asaf Azzura
 %---------------------------------------------------------
+%    starting the gen server and init it
 start_link([Num])->
 	gen_server:start_link({local,gs},pc,[Num],[]).	%start gs
 
@@ -24,10 +33,11 @@ init([Num]) ->
 	ets:new(location,[set,named_table,public]),	    %for holding the process that will run in my corner
 	ets:new(param,[set,named_table,public]),	    %for paramters
 	ets:insert(param,{index,Num}),			    %add my number to ets, this number will say which corner in the map i manege
-	ets:insert(param,{proc_id,1}),
-	ets:insert(param,{light,off}),
-	ets:new(interaction,[set,named_table]),
-	ets:new(ranks,[set,named_table,public]),
+	ets:insert(param,{proc_id,1}),			
+	ets:insert(param,{light,off}),			    %insert defualt light status
+	ets:new(interaction,[set,named_table]),		    %start ets for interactions
+	ets:new(ranks,[set,named_table,public]),	    %start ets for ranks
+	ets:new(walk_pics,[set,named_table,public]),
 	setBounds(Num),					    %set bounds for each PC
 	gen_server:cast({gs,?MAIN},{ready,Num,node()}),	    %send main im ready
 	{ok,set}.				            %done
@@ -40,9 +50,12 @@ status()->
 	end, %end wait
 	Location=ets:tab2list(location),
 	Ranks = ets:tab2list(ranks),		       	%save all locations ets in list
-	gen_server:cast({gs,?MAIN},{status,read(param,index),Location,Ranks}),  	%send the ets with locations to main
+	Walk = ets:tab2list(walk_pics),
+	gen_server:cast({gs,?MAIN},{status,read(param,index),Location,Ranks,Walk}),  	%send the ets with locations to main
 	status(). 
 %---------------------------------------------------------
+
+%checking if process who bumped wallbar, if its the bar part or the wall part
 checkBar(Tmp,X)->
 	case Tmp of
 	wallbar-> case X of 
@@ -101,7 +114,7 @@ handle_call({cross,{Xold,Yold},Dir,Gender,Rank,Vec},_,ready)->
 		right->X=Xold+1,Y=Yold;
 		left->X=Xold-1,Y=Yold
 	end,
-	case ets:lookup(location,{X,Y}) of
+	case ets:lookup(location,{X,Y}) of		
 		[]->Id = newProc({X,Y},Gender,Rank,Vec),
 		ets:insert(location,{{X,Y},{Id,Gender}}),
 		ets:insert(ranks,{{X+8,Y-15},toAtom(Rank)}),
@@ -165,13 +178,19 @@ handle_cast({love,Id1,Id2,{X1,Y1}=Curr1,{X2,Y2}=Curr2},ready)->
 	ets:delete(location,Curr2),
 	gen_statem:stop(Id1),
 	gen_statem:stop(Id2),
-	heart(Curr1),
+	heart({X1-30,Y1-30}),
+	{noreply,ready};
+
+handle_cast({pow,{X,Y}},ready)->
+	pow({X-40,Y-40}),
 	{noreply,ready};
 
 handle_cast({dead,Id,{X,Y}=Curr},ready)->
 	ets:delete(location,Curr),
+	ets:delete(walk_pics,Curr),
 	ets:delete(ranks,{X+8,Y-15}),
 	gen_statem:stop(Id),
+	
 	{noreply,ready};
 
 %walk request
@@ -196,6 +215,10 @@ handle_cast({walkreq,Old={XOld,YOld},New={XNew,YNew},Id,Cv,Gender,Dir},ready)->
 				ets:delete(ranks,{XOld+8,YOld-15}),
 				ets:insert(location,{New,Data}),
 				ets:insert(ranks,{{XNew+8,YNew-15},toAtom(read(param,{Id,rank}))}),
+				{Num,_G,OldDir}=read(walk_pics,Old),
+				ets:delete(walk_pics,Old),
+				NewNum=((Num+1)rem 4),
+				ets:insert(walk_pics,{New,{NewNum,Gender,Dir}}),				
 				{dance};
 			wall->io:format("sent wall to the process~n"),
 				{wall,EventWith};
@@ -215,6 +238,10 @@ handle_cast({walkreq,Old={XOld,YOld},New={XNew,YNew},Id,Cv,Gender,Dir},ready)->
 				ets:delete(ranks,{XOld+8,YOld-15}),
 				ets:insert(location,{New,Data}),
 				ets:insert(ranks,{{XNew+8,YNew-15},toAtom(read(param,{Id,rank}))}),
+				{Num,_G,OldDir}=read(walk_pics,Old),
+				ets:delete(walk_pics,Old),
+				NewNum=((Num+1)rem 4),
+				ets:insert(walk_pics,{New,{NewNum,Gender,Dir}}),
 				noreply;
 			_->io:format("sent cross to the process~n"),
 				try sendCrossRequst(InteractionObj,Old,EventWith,Gender,read(param,{Id,rank}),Dir,Id) of
@@ -235,7 +262,11 @@ handle_cast({walkreq,Old={XOld,YOld},New={XNew,YNew},Id,Cv,Gender,Dir},ready)->
 
 sendCrossRequst(PC,Old={XOld,YOld},EventWith,Gender,Rank,Vec,Id)->
 		case gen_server:call({gs,PC},{cross,Old,EventWith,Gender,Rank,Vec}) of
-			ok->ets:delete(location,Old),ets:delete(ranks,{XOld+8,YOld-15}),gen_statem:stop(Id),noreply;%if cross, kill the process
+			ok->	ets:delete(location,Old),
+				ets:delete(ranks,{XOld+8,YOld-15}),
+				gen_statem:stop(Id),
+				ets:delete(walk_pics,Old),		
+				noreply;%if cross, kill the process
 			_->{wall,EventWith}
 		end.	
 
@@ -279,6 +310,14 @@ heart(X,Y,[H|T])->
 	wait(150),
 	heart(X,Y,T).
 
+pow({X,Y})->
+	spawn(pc,pow,[X,Y,[pow1,pow2,pow3,pow4,pow5,pow5,pow5|[]]]).
+pow(X,Y,[])-> ets:delete(ranks,{X,Y});
+pow(X,Y,[H|T])->
+	ets:insert(ranks,{{X,Y},H}),
+	wait(100),
+	pow(X,Y,T).
+
 wait(X)->
 	receive
 		after X-> ok
@@ -293,6 +332,7 @@ newProc({X,Y},Gender,Rank,Dir)->
 		pc4->?PC4
 	end,
 	spawn(proc,start_link,[Cnt,{{X,Y},Gender,Rank,Dir},Pc]),
+	ets:insert(walk_pics,{{X,Y},{0,Gender,Dir}}),
 	write(param,proc_id,Cnt+1),
 	toAtom(Cnt).
 

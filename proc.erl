@@ -4,25 +4,55 @@
 -define(CB_MODE, handle_event_function).
 -define(STEP_SIZE, 3).
 
-start_link(Reg,{{X,Y},Gender,Rank,Dir}=Data,Pc)->
+
+%  _____                                         _____               _____ _        _                 
+% |  __ \                                       / ____|             / ____| |      | |                
+% | |__) | __ ___   ___ ___  ___ ___   ______  | |  __  ___ _ __   | (___ | |_ __ _| |_ ___ _ __ ___  
+% |  ___/ '__/ _ \ / __/ _ \/ __/ __| |______| | | |_ |/ _ \ '_ \   \___ \| __/ _` | __/ _ \ '_ ` _ \ 
+% | |   | | | (_) | (_|  __/\__ \__ \          | |__| |  __/ | | |  ____) | || (_| | ||  __/ | | | | |
+% |_|   |_|  \___/ \___\___||___/___/           \_____|\___|_| |_| |_____/ \__\__,_|\__\___|_| |_| |_|
+%
+%	By: Itay Sagiv & Asaf Azzura
+%                                                                                                                                                                                                      
+%
+
+
+%start the gen statem func
+start_link(Reg,{{X,Y},_Gender,_Rank,_Dir}=Data,Pc)->
 	gen_statem:start_link({local,toAtom(Reg)},proc,[Data,toAtom(Reg),Pc],[]).
 
+%Set up the gen statem
 init([{{X,Y},Gender,Rank,Dir},Reg,Pc])->
 	io:format("started process in ~p~n",[Reg]),
-	ets:insert(param,{{Reg,curr},{X,Y}}),
-	ets:insert(param,{{Reg,gender},Gender}),
-	case Rank of
+	ets:insert(param,{{Reg,curr},{X,Y}}),		%insert is current location
+	ets:insert(param,{{Reg,gender},Gender}),	%insert is gender
+	case Rank of					%for new process create randmloy rank, for process who cross from other pc, save is rank
 	-1 -> ets:insert(param,{{Reg,rank},rand:uniform(5)+2});
 	_->ets:insert(param,{{Reg,rank},Rank})
 	end,
-	ets:insert(ranks,{{X+8,Y-15},toAtom(read(param,{Reg,rank}))}),
-	ets:insert(param,{{Reg,cv},ready}),
+	ets:insert(ranks,{{X+8,Y-15},toAtom(read(param,{Reg,rank}))}),%insert rank pic
+	ets:insert(param,{{Reg,cv},ready}),		%insert is cv (defualt is 'ready')
 	
-	Data = #{cv=>ready,dir=>Dir,id=>Reg, pc=>Pc},
-	spawn_link(fun()->step(Reg) end),
+	Data = #{cv=>ready,dir=>Dir,id=>Reg, pc=>Pc},	%set up is data
+	spawn_link(fun()->step(Reg) end),		%start is walking progarm with 2 spawns
 	spawn_link(fun()->changeDir(Reg) end),
 	{?CB_MODE,walk,Data}.
 
+
+% _                     _ _                             _       
+%| |__   __ _ _ __   __| | | ___    _____   _____ _ __ | |_ ___ 
+%| '_ \ / _` | '_ \ / _` | |/ _ \  / _ \ \ / / _ \ '_ \| __/ __|
+%| | | | (_| | | | | (_| | |  __/ |  __/\ V /  __/ | | | |_\__ \
+%|_| |_|\__,_|_| |_|\__,_|_|\___|  \___| \_/ \___|_| |_|\__|___/
+%================================================================                                                               
+%
+
+%    ___                         
+%   /   \ __ _  _ __    ___  ___ 
+%  / /\ // _` || '_ \  / __|/ _ \
+% / /_//| (_| || | | || (__|  __/
+%/___,'  \__,_||_| |_| \___|\___|                                
+%--------------------------------------------------------------
 handle_event(cast,{dance},walk,#{id := Id, cv := ready}=Data)->
 	io:format("process ~p received dance~n",[Id]),
 	gen_server:cast(gs,{dancing,Id,read(param,{Id,gender}),read(param,{Id,curr})}),
@@ -33,18 +63,19 @@ handle_event(cast,{dance},walk,#{id := Id, cv := ready}=Data)->
 handle_event(cast,{dance},_,Data)->
 	{keep_state,Data};
 
-handle_event(cast,{chngDir,Turn},_,#{dir := Dir}=Data)->
-	NewDir = case Dir+Turn of
-		9->1;
-		0->8;
-		X->X
-	end,
-	{keep_state,Data#{dir := NewDir}};
-
 handle_event(cast,{stop_dance},stop,#{id := Id}=Data)->
 	spawn_link(fun()->timer(3000,Id,{stop_bo}) end),
 	{next_state,walk,Data};
 
+%______        _         _     _               
+%|  _  \      (_)       | |   (_)              
+%| | | | _ __  _  _ __  | | __ _  _ __    __ _ 
+%| | | || '__|| || '_ \ | |/ /| || '_ \  / _` |
+%| |/ / | |   | || | | ||   < | || | | || (_| |
+%|___/  |_|   |_||_| |_||_|\_\|_||_| |_| \__, |
+%                                         __/ |
+%                                        |___/ 
+%----------------------------------------------
 handle_event(cast,{bar},walk,#{id := Id, dir := Dir}=Data)->
 	Impact = case Dir of
 		X when X>=1,X<5 -> up;
@@ -67,16 +98,21 @@ handle_event(cast,{stop_drink},stop,#{id := Id}=Data)->
 	spawn_link(fun()->timer(3000,Id,{stop_bo}) end),
 	{next_state,walk,Data};
 
-handle_event(cast,{stop_bo},_,#{id := Id}=Data)->
-	ets:insert(param,{{Id,cv},ready}),
-	{next_state,walk,Data#{cv := ready}};
-
+%  _____         _                           _    _               
+% |_   _|       | |                         | |  (_)              
+%   | |   _ __  | |_  ___  _ __  __ _   ___ | |_  _   ___   _ __  
+%   | |  | '_ \ | __|/ _ \| '__|/ _` | / __|| __|| | / _ \ | '_ \ 
+%  _| |_ | | | || |_|  __/| |  | (_| || (__ | |_ | || (_) || | | |
+% |_____||_| |_| \__|\___||_|   \__,_| \___| \__||_| \___/ |_| |_|
+%-------------------------------------------------------------------                                                                 
+                                                                 
 handle_event(cast,{inter_wait,OtherId,OtherGender},walk,#{dir := Dir , id := Id}=Data)->
 	NewDir=stepBack(Id,Dir,person),
 	ets:insert(param,{{Id,cv},bo}),
 	{next_state,stop,Data#{ dir :=  NewDir, cv := bo}};
 
 handle_event(cast,{end_inter},stop,#{id := Id}=Data)->
+	spawn_link(fun()->checkRank(Id) end),
 	spawn_link(fun()->timer(5000,Id,{stop_bo}) end),
 	{next_state,walk,Data};
 
@@ -88,8 +124,7 @@ handle_event(cast,{inter_begin,OtherId,OtherGender},walk,#{ id := Id , dir := Di
 		{love,Curr}-> ok;
 		_-> ok
 	end,
-	spawn_link(fun()->checkRank(Id) end),
-	spawn_link(fun()->timer(3000,Id,{stop_inter,OtherId,Res}) end),
+	spawn_link(fun()->timer(1000,Id,{stop_inter,OtherId,Res}) end),
 	ets:insert(param,{{Id,cv},bo}),
 	{next_state,stop,Data#{ dir := NewDir, cv := bo}};
 
@@ -108,18 +143,40 @@ handle_event({call,From},{my_rank,OtherRank,OtherGender},stop,#{ id := Id}=Data)
 		lose-> write(param,{Id,rank},MyRank-1);
 		_-> ok
 	end,
-	spawn_link(fun()->checkRank(Id) end),
 	{keep_state,Data,[{reply,From,Other}]}; 
 
 handle_event(cast,{stop_inter,OtherId,Res},stop,#{ id := Id}=Data)->
 	case Res of
 		{love,Curr}->gen_server:cast(gs,{love,Id,OtherId,Curr,read(param,{Id,curr})});
-		_->ok
+		tie->ok;
+		_-> gen_server:cast(gs,{pow,read(param,{Id,curr})})
 	end,
 	gen_statem:cast(OtherId,{end_inter}),
+	spawn_link(fun()->checkRank(Id) end),
 	spawn_link(fun()->timer(5000,Id,{stop_bo}) end),
 	{next_state,walk,Data};
 	
+%   _____                                 _ 
+%  / ____|                               | |
+% | |  __   ___  _ __    ___  _ __  __ _ | |
+% | | |_ | / _ \| '_ \  / _ \| '__|/ _` || |
+% | |__| ||  __/| | | ||  __/| |  | (_| || |
+%  \_____| \___||_| |_| \___||_|   \__,_||_|
+%-----------------------------------------------                                           
+                                          
+handle_event(cast,{chngDir,Turn},_,#{dir := Dir}=Data)->
+	NewDir = case Dir+Turn of
+		9->1;
+		0->8;
+		X->X
+	end,
+	{keep_state,Data#{dir := NewDir}};
+
+
+handle_event(cast,{stop_bo},_,#{id := Id}=Data)->
+	ets:insert(param,{{Id,cv},ready}),
+	{next_state,walk,Data#{cv := ready}};
+
 
 handle_event(cast,{wall,Impact},_,#{dir := Dir , id := Id}=Data)->
 	NewDir=stepBack(Id,Dir,Impact),

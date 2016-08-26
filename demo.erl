@@ -166,7 +166,7 @@ init(Options) ->
     {Frame, State#state{example=ExampleObj}}.
 
 create_subwindow(Parent, BoxLabel, Funs) ->
-    Panel = wxPanel:new(Parent,[{size,{1000,580}}]),
+    Panel = wxPanel:new(Parent,[{size,{1000,540}}]),
     Sz    = wxStaticBoxSizer:new(?wxVERTICAL, Panel, [{label, BoxLabel}]),
     wxPanel:setSizer(Panel, Sz),
     Ctrls = [Fun(Panel) || Fun <- Funs],
