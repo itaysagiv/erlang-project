@@ -30,7 +30,7 @@ init(_)->
 	ets:new(walk_pics,[set,named_table,public]),
 	ets:insert(walk_pics,[{pc1,[]},{pc2,[]},{pc3,[]},{pc4,[]}]),
 	spawn_link(fun()->wait(50000),gen_server:cast(gs,{timeout}) end), %set timer to 50 sec - if not all 4 pcs connect - shut down
-	spawn(fun()->wait(5000),keepAlive() end),
+	
 	{ok,set}.
 %------------------------------------
 
@@ -50,7 +50,22 @@ keepAlive([{Key,Pc}|T])->				%run over list of all pc and check if alive
 		DarkLoc = case Key of
 			pc1-> {175,35}; pc2-> {675,35}; pc3-> {175,285}; pc4-> {675,285}
 			end,
-		ets:insert(location,{Key,[{DarkLoc,{'-1',dark}}]}),
+		
+		Inherit = case Key of
+			pc1-> Old=pc3,pc2;
+			pc2-> Old=pc4,pc1;
+			pc3-> Old=pc1,pc4;
+			pc4-> Old=pc2,pc3
+		end,
+		SaveLocation = read(location,Key),
+		SaveRanks = read(ranks,Key),
+		SaveWalks = read(walk_pics,Key),
+		try gen_server:call(read(pc,Inherit),{restore,SaveLocation,SaveRanks,SaveWalks,Key,read(pc,Old)}) of
+			_Ok-> ets:insert(location,{Key,[]})
+		catch
+			exit:_Exit->
+			ets:insert(location,{Key,[{DarkLoc,{'-1',dark}}]})
+		end,
 		ets:insert(ranks,{Key,[]}),
 		ets:insert(walk_pics,{Key,[]}),
 		ets:delete(pc,Key)
@@ -58,7 +73,8 @@ keepAlive([{Key,Pc}|T])->				%run over list of all pc and check if alive
 	
 
 %sends acks to all pc that connected so they start send status
-sendacks(0)->	io:format("all acks sent~n"),spawn_link(fun()->loop() end); % all pc connected, create loop to get updates from pc
+sendacks(0)->	io:format("all acks sent~n"),spawn(fun()->wait(1000),keepAlive() end),
+spawn_link(fun()->loop() end); % all pc connected, create loop to get updates from pc
 sendacks(N)->
 	case N of	%for each pc
 		1->	[{pc1,Dest}]=ets:lookup(pc,pc1), gen_server:cast(Dest,{readyack});
@@ -86,7 +102,7 @@ handle_cast({ready,I,Node},set)->
 	end;
 
 handle_cast({next_pic,Old,New,NewDir},ready)->
-	{Num,Gender,OldDir}=read(walk_pics,Old),
+	{Num,Gender,_OldDir}=read(walk_pics,Old),
 	ets:delete(walk_pics,Old),
 	NewNum=((Num+1)rem 4),
 	ets:insert(walk_pics,{New,{NewNum,Gender,NewDir}}),
@@ -112,8 +128,17 @@ handle_cast({status,Index,Locations,Ranks,Walks},ready)->
 	ets:insert(location,{Index,Locations}),
 	ets:insert(ranks,{Index,Ranks}),
 	ets:insert(walk_pics,{Index,Walks}),
-	{noreply,ready}.
+	{noreply,ready};
 
+handle_cast({menu_create,Gender,{X,Y}},ready)->
+	create(Gender,X,Y),
+	{noreply,ready};
+handle_cast({menu_random},ready)->
+	create(5),
+	{noreply,ready};
+handle_cast({menu_light},ready)->
+	spawn_link(fun()->light() end),
+	{noreply,ready}.
 %temrinate for gen server
 terminate(_,_)->
 	io:format("server down~n"),

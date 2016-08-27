@@ -37,7 +37,8 @@
 	  canvas,
 	  bitmap,
 	  overlay,
-	  pos
+	  pos,
+	  menu
 	}).
 
 start(Config) ->
@@ -160,10 +161,11 @@ do_init(Config) ->
     {W,H} = wxPanel:getSize(Canvas),
     Bitmap = wxBitmap:new(erlang:max(W,30),erlang:max(30,H)),
 	
-    
+    PopupMenu = create_menu(),
+
     {Panel, #state{parent=Panel, config=Config,
 		   canvas = Canvas, bitmap = Bitmap,
-		   overlay = wxOverlay:new()
+		   overlay = wxOverlay:new(), menu=PopupMenu
 		  }}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -191,7 +193,20 @@ handle_event(#wx{event = #wxSize{size={W,H}}},
     wxBitmap:destroy(Prev),
     {noreply, State#state{bitmap = Bitmap}};
 
-handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}}, State) ->
+handle_event(#wx{obj = Menu, id = Id,
+		 event = #wxCommand{type = command_menu_selected}},
+	     State = #state{pos={X,Y}}) ->
+    %% Get the selected item label
+    case Id of
+	1->	gen_server:cast(gs,{menu_create,male,{X,Y}});
+	2->	gen_server:cast(gs,{menu_create,female,{X,Y}});
+	3->	gen_server:cast(gs,{menu_random});
+	4->	gen_server:cast(gs,{menu_light})
+	end,
+    {noreply, State};
+
+handle_event(#wx{obj=Panel,event = #wxMouse{type=left_down, x=X, y=Y}}, State=#state{menu=Menu}) ->
+	wxWindow:popupMenu(Panel, Menu),
     {noreply, State#state{pos={X,Y}}};
 
 handle_event(#wx{event = #wxMouse{type=left_up}},
@@ -237,7 +252,11 @@ terminate(_Reason, #state{overlay=Overlay}) ->
 
 entry(X,Y,Gender,Pc) when Gender==male ; Gender==female->
 	L=read(walk_pics,Pc),
-	[{Num,Gen,Dir}] = [V||{K,V}<-L,K=={X,Y}],
+	List = [V||{K,V}<-L,K=={X,Y}],
+	case List of
+	[]-> Num=0,Gen=Gender,Dir=1;
+	[{Num,Gen,Dir}]-> ok
+	end,
 	case Gender of
 		male->
 			case {Num,Dir} of	
@@ -316,3 +335,18 @@ read(Tab,Key)->
 sortByY([])->[];
 sortByY(List)->
 	[{{X2,Y2},Data2}||{{Y2,X2},Data2}<-lists:sort([{{Y1,X1},Data1}||{{X1,Y1},Data1}<-List])].
+
+create_menu() ->
+	io:format("menu created~n"),
+    Menu = wxMenu:new([]),
+    wxMenu:append(Menu, 1, "Create Male", []),
+    wxMenu:append(Menu, 2, "Create Female", []),
+    wxMenu:appendSeparator(Menu),
+    wxMenu:append(Menu, 3, "Create 5 Random", []),
+    wxMenu:appendSeparator(Menu),
+    wxMenu:append(Menu, 4, "light", []),
+
+    Bitmap = wxArtProvider:getBitmap("wxART_NEW"),
+
+    wxMenu:connect(Menu, command_menu_selected),
+    Menu.
