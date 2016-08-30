@@ -22,7 +22,7 @@
 -behaviour(wx_object).
 
 %% Client API
--export([start/1]).
+-export([start/1,get_pos/2]).
 
 %% wx_object callbacks
 -export([init/1, terminate/2,  code_change/3,
@@ -120,6 +120,7 @@ do_init(Config) ->
 			{male4r,imgToBmp("walk4maleRIGHT.png",Div,1)},
 			{male4l,imgToBmp("walk4maleLEFT.png",Div,1)},
 
+			
 			{standMale,imgToBmp("male.png",Div,1)},
 			{standFemale,imgToBmp("female.png",Div,1)}
 			]),
@@ -181,7 +182,7 @@ handle_sync_event(#wx{event = #wxPaint{}}, _wxObj,
 %% Async Events are handled in handle_event as in handle_info
 handle_event(#wx{event = #wxCommand{type = command_button_clicked}},
 	     State = #state{}) ->
-	Pos=lists:flatten([[entry(X,Y,Gender,Pc)||{{X,Y},{Id,Gender}}<-read(location,Pc)]||Pc<-[pc1|[pc2,pc3,pc4]]]),
+	Pos=lists:flatten([[entry(X,Y,Gender,Pc)||{{X,Y},{_Id,Gender}}<-read(location,Pc)]||Pc<-[pc1|[pc2,pc3,pc4]]]),
 	Ranks =lists:flatten([read(ranks,Pc)||Pc<-[pc1|[pc2,pc3,pc4]]]),
 	%io:format("~p~n",[ets:tab2list(walk_pics)]),
 	print(State,Pos,Ranks),
@@ -193,7 +194,7 @@ handle_event(#wx{event = #wxSize{size={W,H}}},
     wxBitmap:destroy(Prev),
     {noreply, State#state{bitmap = Bitmap}};
 
-handle_event(#wx{obj = Menu, id = Id,
+handle_event(#wx{obj = _Menu, id = Id,
 		 event = #wxCommand{type = command_menu_selected}},
 	     State = #state{pos={X,Y}}) ->
     %% Get the selected item label
@@ -254,8 +255,8 @@ entry(X,Y,Gender,Pc) when Gender==male ; Gender==female->
 	L=read(walk_pics,Pc),
 	List = [V||{K,V}<-L,K=={X,Y}],
 	case List of
-	[]-> Num=0,Gen=Gender,Dir=1;
-	[{Num,Gen,Dir}]-> ok
+	[]-> Num=0,_Gen=Gender,Dir=1;
+	[{Num,_Gen,Dir}]-> ok
 	end,
 	case Gender of
 		male->
@@ -304,16 +305,16 @@ redraw(DC, Bitmap) ->
     wxMemoryDC:destroy(MemoryDC).
 
 get_pos(W,H) ->
-    {random:uniform(W), random:uniform(H)}.
+    {rand:uniform(W), rand:uniform(H)}.
 
 print(State,Positions,Ranks)->
 
 
-    {W,H} = wxPanel:getSize(State#state.canvas),
+    {_W,_H} = wxPanel:getSize(State#state.canvas),
    	
     Fun = fun(DC) ->
 		  wxDC:clear(DC),
-		  lists:foreach(fun({{X,Y}=Pos,Pic}) ->
+		  lists:foreach(fun({{_X,_Y}=Pos,Pic}) ->
 					wxDC:drawBitmap(DC,read(pics,Pic),Pos)
 				end,[{{0,0},bg},{{0,0},tbl},{{604,0},tbr},{{350,100},read(param,light)}]++sortByY(Positions)++sortByY(Ranks)++[{{0,345},bbl},{{604,345},bbr}])
 	  end,
@@ -346,7 +347,7 @@ create_menu() ->
     wxMenu:appendSeparator(Menu),
     wxMenu:append(Menu, 4, "light", []),
 
-    Bitmap = wxArtProvider:getBitmap("wxART_NEW"),
+   _Bitmap = wxArtProvider:getBitmap("wxART_NEW"),
 
     wxMenu:connect(Menu, command_menu_selected),
     Menu.

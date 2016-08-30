@@ -1,6 +1,6 @@
 -module(gs).
 -behaviour(gen_server).
--compile(export_all).
+-export([start_link/0,init/1,sendacks/1,handle_cast/2,terminate/2,code_change/3,kill/0,handle_info/2,handle_call/3,create/1]).
 -define(PCS,4).
 -define(N,424).
 -define(M,944).
@@ -34,42 +34,6 @@ init(_)->
 	{ok,set}.
 %------------------------------------
 
-%keep alive func it to check if all the 4 pc are still connceted to the gen server, if not, the server 
-% know how to treat it and make sure that atleast the other pcs will work
-keepAlive()->
-	keepAlive([{Key,X}|| {Key,{_,X}}<-ets:tab2list(pc)]),%lc to get & save the pc full name
-	keepAlive().
-
-keepAlive([])->ok;					%empty, go check other round now
-keepAlive([{Key,Pc}|T])->				%run over list of all pc and check if alive
-	wait(1000),
- 	try gen_server:call({gs,Pc},{keepalive}) of
-		_OK->ok					%alive
-	catch						%got error, pc down. switch is screen with a sign
-		exit:_Exit->io:format("exit: ~p is down ~n",[Key]),
-		DarkLoc = case Key of
-			pc1-> {175,35}; pc2-> {675,35}; pc3-> {175,285}; pc4-> {675,285}
-			end,
-		
-		Inherit = case Key of
-			pc1-> Old=pc3,pc2;
-			pc2-> Old=pc4,pc1;
-			pc3-> Old=pc1,pc4;
-			pc4-> Old=pc2,pc3
-		end,
-		SaveLocation = read(location,Key),
-		SaveRanks = read(ranks,Key),
-		SaveWalks = read(walk_pics,Key),
-		try gen_server:call(read(pc,Inherit),{restore,SaveLocation,SaveRanks,SaveWalks,Key,read(pc,Old)}) of
-			_Ok-> ets:insert(location,{Key,[]})
-		catch
-			exit:_Exit->
-			ets:insert(location,{Key,[{DarkLoc,{'-1',dark}}]})
-		end,
-		ets:insert(ranks,{Key,[]}),
-		ets:insert(walk_pics,{Key,[]}),
-		ets:delete(pc,Key)
-	end,keepAlive(T).
 	
 
 %sends acks to all pc that connected so they start send status
@@ -77,10 +41,10 @@ sendacks(0)->	io:format("all acks sent~n"),spawn(fun()->wait(1000),keepAlive() e
 spawn_link(fun()->loop() end); % all pc connected, create loop to get updates from pc
 sendacks(N)->
 	case N of	%for each pc
-		1->	[{pc1,Dest}]=ets:lookup(pc,pc1), gen_server:cast(Dest,{readyack});
-		2->	[{pc2,Dest}]=ets:lookup(pc,pc2), gen_server:cast(Dest,{readyack});	
-		3->	[{pc3,Dest}]=ets:lookup(pc,pc3), gen_server:cast(Dest,{readyack});		
-		4->	[{pc4,Dest}]=ets:lookup(pc,pc4), gen_server:cast(Dest,{readyack})
+		1->	[{pc1,Dest}]=ets:lookup(pc,pc1), gen_server:cast(Dest,{readyack});%pc1
+		2->	[{pc2,Dest}]=ets:lookup(pc,pc2), gen_server:cast(Dest,{readyack});%pc2
+		3->	[{pc3,Dest}]=ets:lookup(pc,pc3), gen_server:cast(Dest,{readyack});%pc3	
+		4->	[{pc4,Dest}]=ets:lookup(pc,pc4), gen_server:cast(Dest,{readyack})%pc4
 	end,
 	sendacks(N-1).
 
@@ -100,18 +64,20 @@ handle_cast({ready,I,Node},set)->
 		false->	{noreply,set};
 		true->	sendacks(?PCS),{noreply,ready} %all pcs are connected
 	end;
-
+%this handle is for chagning the walking pic to the next one
+%using rem to reapet the pics that its will look like a real walk
 handle_cast({next_pic,Old,New,NewDir},ready)->
 	{Num,Gender,_OldDir}=read(walk_pics,Old),
-	ets:delete(walk_pics,Old),
+	ets:delete(walk_pics,Old),%delete old pic
 	NewNum=((Num+1)rem 4),
-	ets:insert(walk_pics,{New,{NewNum,Gender,NewDir}}),
+	ets:insert(walk_pics,{New,{NewNum,Gender,NewDir}}),%insert the next pic
 	{noreply,ready};
 
+%the next 2 handles are for creating walk and killing walk, its for when person start inter' like bar,
+% stop walking,start bar animation,back to walking
 handle_cast({new_walk,Loc,Gender,Dir},ready)->
 	ets:insert(walk_pics,{Loc,{0,Gender,Dir}}),
 	{noreply,ready};
-
 handle_cast({kill_walk,Loc},ready)->
 	ets:delete(walk_pics,Loc),
 	{noreply,ready};
@@ -122,14 +88,16 @@ handle_cast({timeout},set)->
 	{noreply,error};
 handle_cast({timeout},State)->
 	{noreply,State};
+%handle for kill
 handle_cast({kill},_)->
 	{stop,normal,done};
+%handle for updating ets
 handle_cast({status,Index,Locations,Ranks,Walks},ready)->
 	ets:insert(location,{Index,Locations}),
 	ets:insert(ranks,{Index,Ranks}),
 	ets:insert(walk_pics,{Index,Walks}),
 	{noreply,ready};
-
+%the next 3 handles are for the menu when user clicking with the mosue. one for each option
 handle_cast({menu_create,Gender,{X,Y}},ready)->
 	create(Gender,X,Y),
 	{noreply,ready};
@@ -148,12 +116,11 @@ kill()->gen_server:stop(gs).%killing the gs with gen server stop
 
 %--function to help handle ets easly--
 %-read: reading from the ets easliy with tab and key
-%-write: writing from the ets easliy with tab and key
+
 read(Tab,Key)->
 	[{Key,Val}]=ets:lookup(Tab,Key),
 	Val.
-write(Tab,Key,Val)->
-	ets:insert(Tab,{Key,Val}).
+
 %-------------------------------------
 
 %loop for update the canvas every 0.1 sec
@@ -196,10 +163,55 @@ create(N)-> X=rand:uniform(?M),Y=rand:uniform(?N),case rand:uniform(2) of
 1->G=male;
 _->G=female end, create(G,X,Y),
 create(N-1).
-
+%creating in the right place and the right pc
 create(Gender,X,Y) when X<?M/2 , Y<?N/2->	[{pc1,From}]=ets:lookup(pc,pc1), gen_server:cast(From,{new,Gender,{X,Y}});%create in pc1	
 create(Gender,X,Y) when X>=?M/2 , Y<?N/2->	[{pc2,From}]=ets:lookup(pc,pc2), gen_server:cast(From,{new,Gender,{X,Y}});%create in pc2
 create(Gender,X,Y) when X<?M/2 , Y>=?N/2->	[{pc3,From}]=ets:lookup(pc,pc3), gen_server:cast(From,{new,Gender,{X,Y}});%create in pc3
 create(Gender,X,Y) when X>=?M/2 , Y>=?N/2->	[{pc4,From}]=ets:lookup(pc,pc4), gen_server:cast(From,{new,Gender,{X,Y}}).%create in pc4
 
+
+%The next code is not finish yet.
+%the code need to be for the backup.
+
+
+
+%keep alive func it to check if all the 4 pc are still connceted to the gen server, if not, the server 
+% know how to treat it and make sure that atleast the other pcs will work
+keepAlive()->
+	keepAlive([{Key,X}|| {Key,{_,X}}<-ets:tab2list(pc)]),%lc to get & save the pc full name
+	keepAlive().
+
+keepAlive([])->ok;					%empty, go check other round now
+keepAlive([{Key,Pc}|T])->				%run over list of all pc and check if alive
+	wait(1000),
+ 	try gen_server:call({gs,Pc},{keepalive}) of
+		_OK->ok					%alive
+	catch						%got error, pc down. switch is screen with a sign
+		exit:_Exit->io:format("exit: ~p is down ~n",[Key]),
+		DarkLoc = case Key of%checking where the dark photo will be
+			pc1-> {175,35}; pc2-> {675,35}; pc3-> {175,285}; pc4-> {675,285}
+			end,
+		
+		Inherit = case Key of%checking who will be the backup pc, and who is bounds
+			pc1-> Old=pc3,pc2;
+			pc2-> Old=pc4,pc1;
+			pc3-> Old=pc1,pc4;
+			pc4-> Old=pc2,pc3
+		end,%backup things
+		SaveLocation = read(location,Key),
+		SaveRanks = read(ranks,Key),
+		SaveWalks = read(walk_pics,Key),
+		try gen_server:call(read(pc,Inherit),{restore,SaveLocation,SaveRanks,SaveWalks,Key,read(pc,Old)}) of
+			_Ok-> ets:insert(location,{Key,[]})%send handle to telling the other pc to backup
+		catch
+			exit:_Exit->
+			ets:insert(location,{Key,[{DarkLoc,{'-1',dark}}]})% other pc fail, put dark photo insted
+		end,
+		ets:insert(ranks,{Key,[]}),
+		ets:insert(walk_pics,{Key,[]}),
+		ets:delete(pc,Key)
+	end,keepAlive(T).
+code_change(_,_,_)->ok.
+handle_info(_,_)->ok.
+handle_call(_,_,_)->ok.
 

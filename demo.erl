@@ -107,14 +107,14 @@ init(Options) ->
 				     [{style, ?wxLB_SINGLE},
 				      {choices, Mods}])
 	       end,
-    {LBPanel, [LB],_} = create_subwindow(LeftSplitter, "Example", [CreateLB]),
+    {_LBPanel, [LB],_} = create_subwindow(LeftSplitter, "Example", [CreateLB]),
     wxListBox:setSelection(LB, 0),
     wxListBox:connect(LB, command_listbox_selected),
 
     CreateCode = fun(Parent) -> 
 			 code_area(Parent)
 		 end,
-    {CodePanel, [Code],_} = create_subwindow(LeftSplitter, "Code", [CreateCode]),
+    {_CodePanel, [Code],_} = create_subwindow(LeftSplitter, "Code", [CreateCode]),
 
     %wxSplitterWindow:splitVertically(LeftSplitter, LBPanel, CodePanel,
 				    % [{sashPosition,150}]),
@@ -137,7 +137,7 @@ init(Options) ->
 		       EventText
 	       end,
 
-    {EvPanel, [EvCtrl],_} = create_subwindow(TopSplitter, "Events", [AddEvent]),
+    {_EvPanel, [EvCtrl],_} = create_subwindow(TopSplitter, "Events", [AddEvent]),
     
     %wxSplitterWindow:splitHorizontally(TopSplitter, UpperSplitter, EvPanel, 
 				%       [{sashPosition,-100}]),

@@ -1,12 +1,13 @@
 -module(pc).
 -behaviour(gen_server).
--compile(export_all).
+-export([start_link/1,init/1,handle_call/3,handle_cast/2,code_change/3,handle_info/2,terminate/2,kill/0,pow/3,heart/3]).
 -include_lib("stdlib/include/qlc.hrl").
 -define(MAIN,'main@asaf-VirtualBox').
 -define(N,424).
 -define(M,944).
 -define(W,28).
 -define(H,39).
+-define(SMELL_R,150).
 -define(PC1,'pc1@asaf-VirtualBox').
 -define(PC2,'pc2@asaf-VirtualBox').
 -define(PC3,'pc3@asaf-VirtualBox').
@@ -66,32 +67,36 @@ checkBar(Tmp,X)->
 end.
 
 %function that check what will be in the next more of process
-checkMove(_,{X,_},{Xmin,_},{_,_},_)when X<Xmin->%left
-	[{Check,Tmp}]=ets:lookup(borders,left),{left,checkBar(Tmp,X)};
-checkMove(_,{X,_},{_,Xmax},{_,_},_)when X>Xmax->%right
-	[{Check,Tmp}]=ets:lookup(borders,right),{right,checkBar(Tmp,X)};
-checkMove(_,{X,Y},{_,_},{Ymin,_},_)when Y<Ymin->%up
-	[{Check,Tmp}]=ets:lookup(borders,up),
+checkMove(_,{X,_},{Xmin,_},{_,_},_,_,_)when X<Xmin->%left
+	[{_Check,Tmp}]=ets:lookup(borders,left),{left,checkBar(Tmp,X)};
+checkMove(_,{X,_},{_,Xmax},{_,_},_,_,_)when X>Xmax->%right
+	[{_Check,Tmp}]=ets:lookup(borders,right),{right,checkBar(Tmp,X)};
+checkMove(_,{X,Y},{_,_},{Ymin,_},_,_,_)when Y<Ymin->%up
+	[{_Check,Tmp}]=ets:lookup(borders,up),
 	case Tmp of 		%this case if for when pc down, its will switch the call to the other pc
 		{L,_R} when X=<?M/2 -> {up,checkBar(L,X)};
 		{_L,R} -> {up,checkBar(R,X)};
 		_-> 	{up,checkBar(Tmp,X)}
 	end;
-checkMove(_,{X,Y},{_,_},{_,Ymax},_)when Y>Ymax->%down
-	[{Check,Tmp}]=ets:lookup(borders,down),
+checkMove(_,{X,Y},{_,_},{_,Ymax},_,_,_)when Y>Ymax->%down
+	[{_Check,Tmp}]=ets:lookup(borders,down),
 	case Tmp of		%this case if for when pc down, its will switch the call to the other pc
 		{L,_R} when X=<?M/2 -> {down,checkBar(L,X)};
 		{_L,R} -> {down,checkBar(R,X)};
 		_-> 	{down,checkBar(Tmp,X)}
 	end;
-checkMove({OldX,OldY},{X,Y},_,_,Dir)->%not eage move, check if free space or person or need to dance
-	case checkRaduis(OldX,OldY,Dir) of
-		[]->	case {read(param,light)} of
-			{on} -> {on,light};
-			_-> {ok,freespace}
-			end;
+checkMove({OldX,OldY},{X,Y},_,_,Dir,Gender,Id)->%not eage move, check if free space or person or need to dance
+	case checkRaduis(OldX,OldY,Dir)  of
+		[]-> case Gender of
+			male-> case checkSmell(OldX,OldY)of {ok,SmellDir}->gen_statem:cast(Id,{smell,SmellDir});_->ok end;
+			_->ok
+			end,
+			case {read(param,light)} of
+				{on} -> {on,light};
+				_-> {ok,freespace}
+				end;
 		[H|_T]->io:format("old: ~p new: ~p person:~p~n",[{OldX,OldY},{X,Y},H]),{H,person}
-	end.
+		end.
 
 %checkDancefloor(X,Y,Pc)->
 %	case Pc of
@@ -117,6 +122,22 @@ checkMove({OldX,OldY},{X,Y},_,_,Dir)->%not eage move, check if free space or per
 	end,
 	qlc:eval(QH).
 
+%func for smelling, checking raduis for female and change the dir for it
+checkSmell(X,Y)->
+	QH=qlc:q([K||{{Xnew,Ynew}=K,{_,Gender}}<-ets:table(location),Gender==female,Xnew<X+?SMELL_R,Xnew>X-?SMELL_R,Ynew<Y+?SMELL_R,Ynew>Y-?SMELL_R]),
+	case qlc:eval(QH) of
+		[{XSmell,YSmell}|_T]-> case {{X,Y},{XSmell,YSmell}} of %change the male diraction acording the female diraction
+						_ when Y==YSmell , X<XSmell -> {ok,1};
+						_ when Y>YSmell , X<XSmell -> {ok,2};
+						_ when Y>YSmell , X==XSmell -> {ok,3};
+						_ when Y>YSmell , X>XSmell -> {ok,4};
+						_ when Y==YSmell , X>XSmell -> {ok,5};
+						_ when Y<YSmell , X>XSmell -> {ok,6};
+						_ when Y<YSmell , X==XSmell -> {ok,7};
+						_ when Y<YSmell , X<XSmell -> {ok,8}		
+					end;
+		_-> {nosmell}
+	end.
 
 %  _    _                 _ _         _____      _ _ 
 % | |  | |               | | |       / ____|    | | |
@@ -127,7 +148,7 @@ checkMove({OldX,OldY},{X,Y},_,_,Dir)->%not eage move, check if free space or per
 %=====================================================
 
 %this handle is when other pc down, is partner pc switch to his place
-handle_call({restore,Location,Ranks,Walks,Pc,Old},_,ready)->
+handle_call({restore,_Location,_Ranks,_Walks,Pc,Old},_,ready)->
 	case Pc of %checking if pc1/2 or pc3/4 and set the new borders
 		X when X==pc1;X==pc2-> 	ets:insert(borders,[{up,wallbar},{down,{?PC3,?PC4}},{right,wall},{left,wall}]),
 				       	ets:insert(param,{bounds,{{1,?M},{1,?N/2}}}),
@@ -204,9 +225,12 @@ handle_cast({readyack},set)->
 %from user
 handle_cast({new,Gender,{X,Y}},ready)->
 	%insert to ets + check close to other process (smell or contact)
+	case ets:lookup(location,{X,Y}) of
+	[]->
 	Id = newProc({X,Y},Gender,-1,rand:uniform(8)),
 	ets:insert(location,{{X,Y},{Id,Gender}}),
-	io:format("new proc: ~p in {~p,~p}~n",[Gender,X,Y]),
+	io:format("new proc: ~p in {~p,~p}~n",[Gender,X,Y]);
+	_->ok end,
 	{noreply,ready};
 %cast for drinking
 handle_cast({drinking,Id,Gender,Curr},ready)->
@@ -223,7 +247,7 @@ handle_cast({light},ready)->
 	ets:insert(param,{light,on}),
 	spawn_link(fun()-> wait(100), ets:insert(param,{light,off}) end),
 	{noreply,ready};
-%cast for love aniation
+%cast for love animation, delete those 2 persons and the ranks
 handle_cast({love,Id1,Id2,{X1,Y1}=Curr1,{X2,Y2}=Curr2},ready)->
 	ets:delete(location,Curr1),
 	ets:delete(ranks,{X1+8,Y1-15}),
@@ -231,13 +255,13 @@ handle_cast({love,Id1,Id2,{X1,Y1}=Curr1,{X2,Y2}=Curr2},ready)->
 	ets:delete(location,Curr2),
 	gen_statem:stop(Id1),
 	gen_statem:stop(Id2),
-	heart({X1-30,Y1-30}),
+	heart({X1-30,Y1-30}),%call heart function animation
 	{noreply,ready};
 %cast for pow animation
 handle_cast({pow,{X,Y}},ready)->
 	pow({X-40,Y-40}),
 	{noreply,ready};
-%cast for dead
+%cast for dead, deleting the procsess
 handle_cast({dead,Id,{X,Y}=Curr},ready)->
 	ets:delete(location,Curr),
 	ets:delete(walk_pics,Curr),
@@ -247,13 +271,15 @@ handle_cast({dead,Id,{X,Y}=Curr},ready)->
 	{noreply,ready};
 
 %walk request
+%the process sending the pc that he want to walk and where, as long its ok the pc will not sending him message,
+%but if the process got interaction. the pc will send him dont move and do the interaction.
 handle_cast({walkreq,Old={XOld,YOld},New={XNew,YNew},Id,Cv,Gender,Dir},ready)->
 	
 	case ets:lookup(interaction,Id) of	%check if in cv ready or bo
 		[{_,{OthrId,OtherGnder}}]-> ets:delete(interaction,Id),Reply={inter_begin,OthrId,OtherGnder};
 		[]->
 		[{bounds,{{Xmin,Xmax},{Ymin,Ymax}}}]=ets:lookup(param,bounds),%checking the bounds of this pc
-		{EventWith,InteractionObj}=checkMove(Old,New,{Xmin,Xmax},{Ymin,Ymax},Dir),%checking what happen next move
+		{EventWith,InteractionObj}=checkMove(Old,New,{Xmin,Xmax},{Ymin,Ymax},Dir,Gender,Id),%checking what happen next move
 
 		io:format("~p:~p~n",[EventWith,InteractionObj]),
 		Reply=case InteractionObj of %reply the process the ack with the details for is requset
@@ -270,16 +296,16 @@ handle_cast({walkreq,Old={XOld,YOld},New={XNew,YNew},Id,Cv,Gender,Dir},ready)->
 				ets:delete(ranks,{XOld+8,YOld-15}),
 				ets:insert(location,{New,Data}),
 				ets:insert(ranks,{{XNew+8,YNew-15},toAtom(read(param,{Id,rank}))}),
-				{Num,_G,OldDir}=read(walk_pics,Old),
+				{Num,_G,_OldDir}=read(walk_pics,Old),
 				ets:delete(walk_pics,Old),
 				NewNum=((Num+1)rem 4),
 				ets:insert(walk_pics,{New,{NewNum,Gender,Dir}})
 				end,				
 				{dance};
 			wall->io:format("sent wall to the process~n"),
-				{wall,EventWith};
+				{wall,EventWith};%sening wall
 			person->io:format("sent person to the process~n"),
-				{{OtherX,OtherY},{OtherId,OtherGender}}=EventWith,		
+				{{_OtherX,_OtherY},{OtherId,OtherGender}}=EventWith,		
 				OtherCv = read(param,{OtherId,cv}),
 				case {Cv,OtherCv} of
 					{Cv,OtherCv} when Cv==bo;OtherCv/=ready->	{wall,person};
@@ -290,13 +316,13 @@ handle_cast({walkreq,Old={XOld,YOld},New={XNew,YNew},Id,Cv,Gender,Dir},ready)->
 			freespace->io:format("sent freespace to the process~n"),
 				%update ets
 				case ets:lookup(location,Old) of
-				[]-> gen_statem:stop(Id);
+				[]-> gen_statem:stop(Id);%we deleting the old place and updating the new place with the next walking picture
 				[{Old,Data}]-> 
 				ets:delete(location,Old),
 				ets:delete(ranks,{XOld+8,YOld-15}),
 				ets:insert(location,{New,Data}),
 				ets:insert(ranks,{{XNew+8,YNew-15},toAtom(read(param,{Id,rank}))}),
-				{Num,_G,OldDir}=read(walk_pics,Old),
+				{Num,_G,_OldDir}=read(walk_pics,Old),
 				ets:delete(walk_pics,Old),
 				NewNum=((Num+1)rem 4),
 				ets:insert(walk_pics,{New,{NewNum,Gender,Dir}})
@@ -306,7 +332,7 @@ handle_cast({walkreq,Old={XOld,YOld},New={XNew,YNew},Id,Cv,Gender,Dir},ready)->
 				try sendCrossRequst(InteractionObj,Old,EventWith,Gender,read(param,{Id,rank}),Dir,Id) of
 					ReturnValue->ReturnValue
 				catch
-					 exit:Exit->{wall,EventWith}
+					 exit:_Exit->{wall,EventWith}
 				end
 					
 		end
@@ -387,7 +413,7 @@ wait(X)->
 %func for creating new process
 newProc({X,Y},Gender,Rank,Dir)->
 	Cnt = read(param,proc_id),
-	Pc = case read(param,index) of
+	Pc = case read(param,index) of%checking which pc.
 		pc1->?PC1;
 		pc2->?PC2;
 		pc3->?PC3;
@@ -404,7 +430,7 @@ drink(Id,Gender,Curr)->
 drink(Id,Gender,Curr,0)->
 	ets:insert(location,{Curr,{Id,Gender}});
 drink(Id,Gender,Curr,N)->
-	Pic = case {Gender,N rem 2} of
+	Pic = case {Gender,N rem 2} of%for each gender.
 		{male,0}-> drink1male; {male,1}-> drink2male; 
 		{female,0}->drink1female; {female,1}-> drink2female end,
 	ets:insert(location,{Curr,{Id,Pic}}),
@@ -413,7 +439,7 @@ drink(Id,Gender,Curr,N)->
 
 %func for handling the dancing
 dance(Id,Gender,Curr)->
-	case Gender of
+	case Gender of		%picking the pictures for the right gender.
 		male-> dance(Id,Gender,Curr,5000,[d1male,d2male,d3male,d4male|[]]);
 		female->  dance(Id,Gender,Curr,5000,[d1female,d2female,d3female,d4female|[]])
 	end.
@@ -421,8 +447,10 @@ dance(Id,Gender,Curr,0,_)->
 	ets:insert(location,{Curr,{Id,Gender}});
 dance(Id,Gender,Curr,Time,[H|T])->
 	ets:insert(location,{Curr,{Id,H}}),
-	wait(250),
+	wait(250),%wait time for the next picture
 	dance(Id,Gender,Curr,Time-250,T++[H]).
 %func to change list to atom
 toAtom(Term)->
 	list_to_atom(lists:flatten(io_lib:format("~p", [Term]))).
+code_change(_,_,_)->ok.
+handle_info(_,_)->ok.
